@@ -3,7 +3,7 @@
 # Constants
 approver_num = 1144 # Approver user number (Eric Prater=1144)
 approver_id = 'EPRATER'  # Approver user ID
-logpath = 'F:\\Time-Importer\\Logs' # Root directory for log files
+logpath = 'C:\\Script\Time-Importer\\Logs' # Root directory for log files
 
 def get_key(in_dict, in_val):
 	# Returns the first key associated with the input dictionary value
@@ -51,6 +51,7 @@ files = [
 	f'{logpath}\\Last_Run_Log.txt',
 	f'{logpath}\\Inserted_docnbrs.txt',
 	f'{logpath}\\Inserted_linenbrs.txt',
+	f'{logpath}\\Updated_linenbrs.txt',
 	f'{logpath}\\TWIDs_Tagged_Imported.txt'
 ]
 

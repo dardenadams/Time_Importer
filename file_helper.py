@@ -1,6 +1,21 @@
 # Helper for reading/writing to files
 
 import dictionaries
+from datetime import datetime
+import os
+import shutil
+
+def archive_logs():
+    # Archives log files in new folder
+
+    # Create new archive folder
+    folder_name = str(datetime.now().strftime("%Y-%m-%d %H%M%S"))
+    path = f'{dictionaries.logpath}\\archive\\{folder_name}'
+    os.mkdir(path)
+
+    # Copy files
+    for f in dictionaries.files:
+        shutil.copy(f, path)
 
 def clear_logs():
     # Clears contents of all log files

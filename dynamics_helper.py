@@ -8,7 +8,7 @@ import traceback
 import file_helper
 
 sql_server = 'sqlsl.esc.com'
-sql_db = 'test_ESCDB'
+sql_db = 'ESCDB'
 
 def sql_connection(database):
     # Establishes a SQL connection using pyodbc
@@ -27,6 +27,17 @@ def sql_query(query, database = sql_db):
 
 def sql_insert(query, database = sql_db):
     # Inserts data to SQL. Specify query.
+    connection = sql_connection(database)
+    cursor = connection.cursor()
+    cursor.execute(query)
+    connection.commit()
+
+def sql_update(table, columns, filters, database = sql_db):
+    # Updates data in SQL. Specify table, column(s) and filter(s).
+    query = f'\
+        UPDATE {database}.dbo.{table} \
+        SET {columns} \
+        WHERE {filters}'
     connection = sql_connection(database)
     cursor = connection.cursor()
     cursor.execute(query)
@@ -52,7 +63,35 @@ def sql_insert_dataset(dataset, table):
     # print(insert_str)
     sql_insert(insert_str, sql_db)
 
-def sql_del_whole_timecard(docnbr, database = sql_db):
+def sql_get_hrs(docnbr, proj, task, col, database = sql_db):
+    # Returns the current hours value for specified line item from SQL
+    ret_val = None
+    query = f'\
+        SELECT TOP 1 * FROM {database}.dbo.PJLABDET \
+        WHERE docnbr=\'{docnbr}\' \
+        AND project=\'{proj}\' \
+        AND pjt_entity=\'{task}\''
+    if sql_bool_test_query(query, database):
+        sql_data = sql_query(query, database)
+        for item in sql_data:
+            ret_val = getattr(item, col)
+    return ret_val
+
+def sql_get_notes(docnbr, proj, task, database = sql_db):
+    # Returns the current notes value for specified line item from
+    ret_val = None
+    query = f'\
+        SELECT TOP 1 * FROM {database}.dbo.PJLABDET \
+        WHERE docnbr=\'{docnbr}\' \
+        AND project=\'{proj}\' \
+        AND pjt_entity=\'{task}\''
+    if sql_bool_test_query(query, database):
+        sql_data = sql_query(query, database)
+        for item in sql_data:
+            ret_val = (item.ld_desc).strip()
+    return ret_val
+
+def del_whole_timecard(docnbr, database = sql_db):
     # Removes data from all SQL tables touched by time_importer.py
     connection = sql_connection(database)
     cursor = connection.cursor()
@@ -64,7 +103,7 @@ def sql_del_whole_timecard(docnbr, database = sql_db):
         cursor.execute(query)
     connection.commit()
 
-def sql_del_pjlabhdr_entry(docnbr, linenbr, database = sql_db):
+def del_pjlabdet_entry(docnbr, linenbr, database = sql_db):
     # Removes data from PJLABDET that match input docnbr/linenbr combination.
     # Use to reverse changes to PJLABDET.
     connection = sql_connection(database)
@@ -75,6 +114,64 @@ def sql_del_pjlabhdr_entry(docnbr, linenbr, database = sql_db):
         AND linenbr=\'' + linenbr + '\''
     cursor.execute(query)
     connection.commit()
+
+def undo_pjlabdet_entry(docnbr, proj, task, day_list, notes, database = sql_db):
+    # Reverses changes to an existing line from PJLABDET
+
+    # Create column/new value string
+    update_str = ''
+    # Add day/new hours value pairs
+    day_list = day_list.split(',')
+    total_hrs = 0
+    count = 1
+    while count <= 7:
+        # Calculate new hours value for day column, if necessary, but iterate
+        # through all columns in DB to get a new total_hrs value.
+
+        # Day column to update
+        day_col = f'day{str(count)}_hr1'
+
+        # Hours to subtract (zero unless file contains record of update)
+        sub_hrs = 0
+        for day in day_list:
+            day_hrs_pair = day.split('|') # List[day_column, value]
+            if day_col == day_hrs_pair[0]:
+                sub_hrs = day_hrs_pair[1]
+
+        cur_hrs = sql_get_hrs(docnbr, proj, task, day_col) # Cur hours in DB
+        new_hrs = float(cur_hrs) - float(sub_hrs) # New hours value
+        total_hrs += new_hrs # Add to running total of hours
+
+        # Add to update string
+        if update_str != '':
+            update_str = f'{update_str}, '
+        update_str = f'{update_str}{day_col}={str(new_hrs)}'
+
+        count += 1
+
+    # Add notes
+    sub_chars = len(notes) # Number of characters to subtract
+    cur_notes = sql_get_notes(docnbr, proj, task) # Current notes string
+    cur_len = len(cur_notes) # Number of characters in current notes string
+    if cur_len > sub_chars:
+        sub_chars += 1 # Remove preceeding comma too if necessary
+    new_notes = cur_notes[:cur_len - sub_chars] # Subtract chars from notes
+    update_str = f'{update_str}, ld_desc=\'{new_notes}\'' # Add to update_str
+
+    # Add total hours
+    update_str = f'{update_str}, total_hrs={str(total_hrs)}'
+
+    # Add total value (rate * total hours)
+    rate = get_line_rate(docnbr, proj, task)
+    total_amt = rate * total_hrs
+    update_str = f'{update_str}, total_amount={str(total_amt)}'
+
+    # Create filter string
+    filters = \
+        f'docnbr=\'{docnbr}\' AND project=\'{proj}\' AND pjt_entity=\'{task}\''
+
+    # Update values
+    sql_update('PJLABDET', update_str, filters)
 
 def add_header_array(table_name):
     # Specify SQL table name (lower case) to get header information to
@@ -211,6 +308,23 @@ def get_user_rate(uid, database = sql_db):
 
     return rate
 
+def get_line_rate(docnbr, proj, task, database = sql_db):
+    # Returns the rate from the input line in PJLABDET
+    rate = None
+
+    query = f'\
+        SELECT TOP 1 * FROM {database}.dbo.PJLABDET \
+        WHERE docnbr=\'{docnbr}\' \
+        AND project=\'{proj}\' \
+        AND pjt_entity=\'{task}\''
+
+    if sql_bool_test_query(query, database):
+        sql_data = sql_query(query)
+        for item in sql_data:
+            rate = item.ld_id06
+
+    return rate
+
 def proj_check(proj, database = sql_db):
     # Returns true if project exists in SL
     query = \
@@ -240,8 +354,8 @@ def pe_user_check(user_num, pe_date, database = sql_db):
     # Returns docnbr of relevent timecard if a timecard already exists for
     # this employee/PE date combo.
     ret_val = None
-    query = \
-        f'SELECT TOP 1 * FROM {database}.dbo.PJLABHDR \
+    query = f'\
+        SELECT TOP 1 * FROM {database}.dbo.PJLABHDR \
         WHERE employee=\'{user_num}\' AND pe_date=\'{pe_date}\''
     if sql_bool_test_query(query, database):
         sql_data = sql_query(query)
@@ -249,10 +363,133 @@ def pe_user_check(user_num, pe_date, database = sql_db):
             ret_val = item.docnbr
     return ret_val
 
+def line_check(proj, task, database = sql_db):
+    # Returns true if project/task combination line already exists on timecard
+    query = f'\
+        SELECT TOP 1 * FROM {database}.dbo.PJLABDET \
+        WHERE pjt_entity=\'{task}\' AND project=\'{proj}\''
+    return sql_bool_test_query(query, database)
+
 def replace_docnbr(timecard, new_docnbr):
     # Replaces docnbr with input on timecard entry line items
     for proj_task in timecard['dets']:
         timecard['dets'][proj_task]['docnbr'] = new_docnbr
+
+def update_rollups(tc_dict):
+    # Updates total hours and lines values on an existing timecard to include
+    # imported values.
+
+    # New hours for this timecard
+    new_hrs = tc_dict['hdr']['le_id06']
+
+    # New lines for this timecard. We must recalculate to exclude any proj/task
+    # combinations that already exist.
+    new_lines = 0
+    for line in tc_dict['dets']:
+        print('')
+
+def sql_insert_line(tc_dict, user, timecard, proj_task, ex_docnbr, linenbr):
+    # Inserts a line of data into PJLABDET
+    ret_val = False
+
+    # If timecard already existed, we need to log docnbr/linenbr
+    # combination in case changes must be reversed.
+    if ex_docnbr != None:
+        error_handler.log_linenbr_insert(ex_docnbr, cur_linenbr)
+
+    try:
+        # Attempt insert
+        sql_insert_dataset(tc_dict['dets'][proj_task], 'PJLABDET')
+    except:
+        # Log failed insert and stack trace
+        print(error_handler.error_msgs['004'] + proj_task)
+        traceback.print_exc()
+        error_handler.log_to_file('004', proj_task)
+        error_handler.log_to_file('000', traceback.format_exc())
+    else:
+        # Log successful insert and update import status to true
+        print(error_handler.error_msgs['006'] + proj_task)
+        error_handler.log_to_file('006', proj_task)
+        ret_val = True
+
+    return ret_val
+
+def sql_update_line(tc_dict, docnbr, linenbr, proj_task, project, task):
+    # Updates hours, dollar amount, and notes data for a project/task line item
+    ret_val = False
+
+    # Iterate through timecard days and update values
+    count = 1
+    total_hrs = 0
+    update_str = ''
+    log_str = ''
+    while count <= 7:
+        # Get value to be added
+        el_id = f'day{str(count)}_hr1'
+        new_val = tc_dict['dets'][proj_task][el_id]
+
+        # Record value to be inserted for logging, if nonzero
+        if float(new_val) > 0:
+            if log_str != '':
+                log_str = f'{log_str},' # CSV element:value pairs
+            log_str = f'{log_str}{el_id}|{new_val}'
+
+        # Get existing value and sum with value to be added
+        ex_val = sql_get_hrs(docnbr, project, task, el_id)
+        new_val = float(new_val) + float(ex_val)
+
+        # Add sum to running total of hours for all days
+        total_hrs = total_hrs + new_val
+
+        # Add new value to update string
+        if count != 1:
+            update_str = f'{update_str}, '
+        update_str = f'{update_str}{el_id}={str(new_val)}'
+        count += 1
+
+    # Add total hours to update string
+    update_str = f'{update_str}, total_hrs={str(total_hrs)}'
+
+    # Calculate new total amount dollar value and add to update string
+    rate = float(tc_dict['dets'][proj_task]['ld_id06'])
+    total_amount = rate * total_hrs
+    update_str = f'{update_str}, total_amount={str(total_amount)}'
+
+    # Add Teamwork IDs to update string
+    tw_ids = tc_dict['dets'][proj_task]['ld_desc']
+    cur_notes = sql_get_notes(docnbr, project, task)
+    if cur_notes != '':
+        cur_notes = f'{cur_notes},'
+    new_notes = f'{cur_notes}{tw_ids}'
+    update_str = f'{update_str}, ld_desc=\'{new_notes}\''
+
+    # Log notes changes to be added
+    log_str = f'{log_str}:{tw_ids}'
+
+    # Construct query filter
+    filter = f'\
+        docnbr=\'{docnbr}\' \
+        AND project=\'{project}\' \
+        AND pjt_entity=\'{task}\''
+
+    # Log attempt to file in case changes must be reversed
+    error_handler.log_linenbr_update(docnbr, project, task, log_str)
+
+    # Update line item
+    try:
+        sql_update('PJLABDET', update_str, filter)
+    except:
+        err_detail = f'Update string: {update_str}\nFilter: {filter}'
+        print(error_handler.error_msgs['024'] + err_detail)
+        traceback.print_exc()
+        error_handler.log_to_file('024', err_detail)
+        error_handler.log_to_file('000', traceback.format_exc())
+    else:
+        print(error_handler.error_msgs['025'] + proj_task)
+        error_handler.log_to_file('025', proj_task)
+        ret_val = True
+
+    return ret_val
 
 def insert_timecard(user, timecard, tc_dict):
     # Takes mapped data for a single timecard and inserts it into the SQL DB
@@ -262,7 +499,7 @@ def insert_timecard(user, timecard, tc_dict):
     pe_date = tc_dict['hdr']['pe_date']
     cur_docnbr = tc_dict['hdr']['docnbr']
     ex_docnbr = pe_user_check(user_num, pe_date)
-    timecard_posted = True
+    timecard_posted = False
 
     # Insert header data if none already exists
     if ex_docnbr == None:
@@ -270,35 +507,39 @@ def insert_timecard(user, timecard, tc_dict):
             sql_insert_dataset(tc_dict['hdr'], 'PJLABHDR')
         except:
             # Log error and stack trace
-            print(error_handler.error_msgs['003'] + pe_date)
+            print(error_handler.error_msgs['003'] + str(pe_date))
             traceback.print_exc()
-            error_handler.log_to_file('003', pe_date)
-            error_handler.log_to_file('', traceback.format_exc())
+            error_handler.log_to_file('003', str(pe_date))
+            error_handler.log_to_file('000', traceback.format_exc())
         else:
             # Log success
-            print(error_handler.error_msgs['005'] + pe_date)
-            error_handler.log_to_file('005', pe_date)
+            print(error_handler.error_msgs['005'] + str(pe_date))
+            error_handler.log_to_file('005', str(pe_date))
             error_handler.log_docnbr_insert(cur_docnbr)
     else:
-        # Timecard already exists. Skip inserting header entry and replace
-        # docnbr in timecard line-items with existing docnbr.
+        # Timecard already exists. Skip inserting header entry, replace
+        # docnbr in timecard line-items with existing docnbr, and update
+        # line total and hour total rollups on existing timecard.
         replace_docnbr(tc_dict, ex_docnbr)
 
         # Check if existing docnbr is already marked (P)osted
         if status_posted_check(ex_docnbr):
             # Log error and do not proceed to line item import
-            print(error_handler.error_msgs['008'] + pe_date)
-            error_handler.log_to_file('008', pe_date)
+            print(error_handler.error_msgs['008'] + str(pe_date))
+            error_handler.log_to_file('008', str(pe_date))
             timecard_posted = True
         else:
             # Log info message and proceed to import line items
-            print(error_handler.error_msgs['007'] + pe_date)
-            error_handler.log_to_file('007', pe_date)
+            print(error_handler.error_msgs['007'] + str(pe_date))
+            error_handler.log_to_file('007', str(pe_date))
 
     # Insert line-item data
     for proj_task in tc_dict['dets']:
-        proceed = True
+        operation = 'insert' # Default assume insert, not update operation
+        checks_passed = True # Default assume all checks will pass
+        mark_imported = False
         cur_proj = tc_dict['dets'][proj_task]['project']
+        cur_task = tc_dict['dets'][proj_task]['pjt_entity']
         cur_twids = tc_dict['dets'][proj_task]['ld_desc']
         cur_linenbr = tc_dict['dets'][proj_task]['linenbr']
 
@@ -307,48 +548,64 @@ def insert_timecard(user, timecard, tc_dict):
         error_handler.error_dict[user][timecard][proj_task] = {}
         error_handler.error_dict[user][timecard][proj_task]['imported'] = False
 
-        # Check if project exists in SL
-        if not proj_check(cur_proj):
-            # Log error, flag do not proceed
+        # Check if timecard is (P)osted. For logging line-item details.
+        if timecard_posted == True:
+            # Log error, do not insert or update.
+            print(error_handler.error_msgs['009'] + str(cur_twids))
+            error_handler.log_to_file('009', str(cur_twids))
+            error_handler.error_dict[user][timecard][proj_task]['imported'] = \
+                'Posted'
+            checks_passed = False
+
+        # Check if project exists in SL. If not, do not insert or update.
+        if not proj_check(cur_proj) and checks_passed == True:
+            # Log error, do not insert or update
             print(error_handler.error_msgs['001'] + cur_proj)
             error_handler.log_to_file('001', cur_proj)
-            proceed = False
+            checks_passed = False
 
-        # Check if timecard entry ID has previously been imported
+        # Check if timecard entry ID has previously been imported.
         if id_check(cur_twids):
             # Log error, update import status to true since ID already in SL,
-            # flag do not proceed.
-            print(error_handler.error_msgs['002'] + cur_twids)
-            error_handler.log_to_file('002', cur_twids)
-            error_handler.error_dict[user][timecard][proj_task]['imported'] \
+            # do not insert or update.
+            print(error_handler.error_msgs['002'] + str(cur_twids))
+            error_handler.log_to_file('002', str(cur_twids))
+            mark_imported = True
+            checks_passed = False
+
+        # Determine if update or insert should be performed
+        if ex_docnbr != None and checks_passed == True:
+            if line_check(cur_proj, cur_task):
+                # If line already exists, perform update instead of insert.
+                print(error_handler.error_msgs['023'] + str(cur_twids))
+                error_handler.log_to_file('023', str(cur_twids))
+                operation = 'update'
+
+        # Perform line insert or update as indicated
+        if checks_passed == True:
+            if operation == 'insert':
+                mark_imported = sql_insert_line( \
+                    tc_dict, \
+                    user, \
+                    timecard, \
+                    proj_task, \
+                    ex_docnbr, \
+                    cur_linenbr\
+                )
+            elif operation == 'update':
+                mark_imported = sql_update_line( \
+                    tc_dict, \
+                    ex_docnbr, \
+                    cur_linenbr, \
+                    proj_task, \
+                    cur_proj, \
+                    cur_task \
+                )
+
+        # Mark line imported if successful
+        if mark_imported == True:
+            error_handler.error_dict[user][timecard][proj_task]['imported']\
                 = True
-            proceed = False
-
-        # Check if timecard is (P)osted, in which case skip importing
-        if timecard_posted == True:
-            print(error_handler.error_msgs['009'] + cur_twids)
-            error_handler.log_to_file('009', cur_twids)
-
-        # If all checks pass, insert line item
-        if proceed == True and timecard_posted == False:
-            try:
-                sql_insert_dataset(tc_dict['dets'][proj_task], 'PJLABDET')
-            except:
-                # Log failed insert and stack trace
-                print(error_handler.error_msgs['004'] + proj_task)
-                traceback.print_exc()
-                error_handler.log_to_file('004', proj_task)
-                error_handler.log_to_file('', traceback.format_exc())
-            else:
-                # Log successful insert and update import status to true
-                print(error_handler.error_msgs['006'] + proj_task)
-                error_handler.log_to_file('006', proj_task)
-                error_handler.error_dict[user][timecard][proj_task]['imported']\
-                    = True
-                # If timecard already existed, we also need to log
-                # docnbr/linenbr combination in case changes must be reversed.
-                if ex_docnbr != None:
-                    error_handler.log_linenbr_insert(ex_docnbr, cur_linenbr)
 
 def insert_data(master_dict):
     # Takes a master dict of populated SQL table dicts and attempts to import

@@ -299,23 +299,51 @@ def print_tw_data(tw_data):
 def get_teamwork_data():
 	# Returns library of projects with associated time records, task codes,
 	# and SL user IDs
+	teamwork_data = None
 
 	# Get time ready for import
 	time_dict = get_time()
 
-	# Get list of projects from ready_time, then get Dynamics Project Number
-	# and Task Code for each
-	all_projects = get_project_list(time_dict)
-	project_details = get_project_details(all_projects)
+	# Proceed if any time entries were found
+	if len(time_dict) > 0:
 
-	# Combine and organize all data
-	teamwork_data = construct_dict(time_dict, project_details)
+		# Get list of projects from ready_time, then get Dynamics Project Number
+		# and Task Code for each
+		all_projects = get_project_list(time_dict)
+		project_details = get_project_details(all_projects)
+
+		# Combine and organize all data
+		teamwork_data = construct_dict(time_dict, project_details)
+
+	else:
+		print(error_handler.error_msgs['027'])
+		error_handler.log_to_file('027', '')
 
 	# print_tw_data(teamwork_data)
 	return teamwork_data
 
+def put_tag_list(entry_ids, tag):
+	# Takes a CSV list of entry IDs and puts the specified tag on them
+	entry_ids = str(entry_ids)
+	entry_ids = entry_ids.split(',') # IDs are CSV
+
+	for id in entry_ids:
+		# For each item in CSV, update tag and log
+		info_msg =  f'ID: {id}, Tag: {tag}'
+		print(error_handler.error_msgs['021'] + info_msg)
+		error_handler.log_to_file('021',  info_msg)
+		put_tag(id, tag)
+
+		# Log ID if status is imported in case changes must be reversed.
+		# No need to log IDs for items tagged Posted; do not need to try
+		# importing them again.
+		if tag == 'Time Imported':
+			error_handler.log_twid_import(id)
+
 def mark_items_imported(tw_dict):
 	# Marks items imported in Teamwork if they have the
+	print(error_handler.error_msgs['026'])
+	error_handler.log_to_file('026', '')
 
 	# Update Teamwork dict with current import status
 	for user in tw_dict:
@@ -329,15 +357,16 @@ def mark_items_imported(tw_dict):
 					# Entry IDs (may be more than one per line item)
 					entry_ids = tw_dict[user][timecard][proj_task]['tw_ids']
 
+					imp_status = tw_dict[user][timecard][proj_task]['imported']
+
 					# Update import status
-					if tw_dict[user][timecard][proj_task]['imported'] == True:
-						entry_ids = str(entry_ids)
-						entry_ids = entry_ids.split(',') # IDs are CSV
-						for id in entry_ids:
-							print(error_handler.error_msgs['021'] + id)
-							error_handler.log_to_file('021', id)
-							error_handler.log_twid_import(id)
-							put_tag(id, 'Time Imported')
+					if imp_status == True:
+						put_tag_list(entry_ids, 'Time Imported')
+
+					elif imp_status == 'Posted':
+						tag = 'Time Not Imported - Posted Timecard'
+						put_tag_list(entry_ids, tag)
+
 					else:
 						entry_ids = str(entry_ids)
 						entry_ids = entry_ids.split(',')

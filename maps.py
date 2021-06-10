@@ -4,6 +4,7 @@ import dictionaries
 import time_helper
 import dynamics_helper
 from datetime import datetime
+import error_handler
 
 cur_docnbr = 0 # Current docnbr, used by dynamics_helper.get_next_linenbr
 
