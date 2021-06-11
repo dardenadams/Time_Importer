@@ -396,24 +396,24 @@ def update_rollups(docnbr, user = '', timecard = '', database = sql_db):
             t_lines += 1
 
     # Determine timecard status
-    status = 'I' # Default: (I)n Process
-    pe_date = None
-    query = \
-        f'SELECT TOP 1 * FROM {database}.dbo.PJLABHDR WHERE docnbr=\'{docnbr}\''
-    if sql_bool_test_query(query):
-        sql_data = sql_query(query)
-        for line in sql_data:
-            pe_date = time_helper.str_to_time(str(line.pe_date))
-
-    post_date = time_helper.get_post_date(pe_date)
-    cur_date = time_helper.get_cur_time()
-
-    if cur_date > post_date:
-        status = 'C'
+    # status = 'I' # Default: (I)n Process
+    # pe_date = None
+    # query = \
+    #     f'SELECT TOP 1 * FROM {database}.dbo.PJLABHDR WHERE docnbr=\'{docnbr}\''
+    # if sql_bool_test_query(query):
+    #     sql_data = sql_query(query)
+    #     for line in sql_data:
+    #         pe_date = time_helper.str_to_time(str(line.pe_date))
+    #
+    # post_date = time_helper.get_post_date(pe_date)
+    # cur_date = time_helper.get_cur_time()
+    #
+    # if cur_date > post_date:
+    #     status = 'C'
 
     # Construct update string
-    update_str = \
-        f'le_id06={str(t_hrs)}, le_id07={str(t_lines)}, le_status=\'{status}\''
+    update_str = f'le_id06={str(t_hrs)}, le_id07={str(t_lines)}'
+        # f'le_id06={str(t_hrs)}, le_id07={str(t_lines)}, le_status=\'{status}\''
 
     # Construct filter string
     filter_str = f'docnbr=\'{docnbr}\''
