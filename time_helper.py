@@ -57,3 +57,15 @@ def get_week(pe_date):
     week = '0' + str(week)
 
     return week
+
+def get_post_date(pe_date):
+    # Returns the date after which time will be marked (P)osted
+    return pe_date + timedelta(days=5)
+
+def get_cur_time():
+    # Returns current date/time
+    return datetime.now()
+
+def str_to_time(time_str):
+    # Returns correctly formatted datetime object from string
+    return datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')

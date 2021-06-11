@@ -36,3 +36,10 @@ def app_file(file, some_str):
     f = open(file, "a")
     f.write(some_str)
     f.close()
+
+def get_file_content(file):
+    # Opens contents of file
+    data = None
+    with open(file, 'r') as file:
+        data = file.read()
+    return data

@@ -6,6 +6,7 @@ import dictionaries
 import error_handler
 import traceback
 import file_helper
+import time_helper
 
 sql_server = 'sqlsl.esc.com'
 sql_db = 'ESCDB'
@@ -375,18 +376,62 @@ def replace_docnbr(timecard, new_docnbr):
     for proj_task in timecard['dets']:
         timecard['dets'][proj_task]['docnbr'] = new_docnbr
 
-def update_rollups(tc_dict):
-    # Updates total hours and lines values on an existing timecard to include
-    # imported values.
+def update_rollups(docnbr, user = '', timecard = '', database = sql_db):
+    # 1. Updates total hours and total lines values on an existing timecard to
+    #   include imported values.
+    # 2. Sets status to (C)ompleted if beyond period end date + 5 days.
+    #    Otherwise, sets status to (I)n Process.
 
-    # New hours for this timecard
-    new_hrs = tc_dict['hdr']['le_id06']
+    # Get hour and line data from SQL
+    t_hrs = 0 # Sum of all hours on timecard
+    t_lines = 0 # Sum of lines
+    query = f'SELECT * FROM {database}.dbo.PJLABDET WHERE docnbr=\'{docnbr}\''
+    if sql_bool_test_query(query):
+        sql_data = sql_query(query)
+        for line in sql_data:
+            # Add line total hours to timecard total hours
+            t_hrs += float(line.total_hrs)
 
-    # New lines for this timecard. We must recalculate to exclude any proj/task
-    # combinations that already exist.
-    new_lines = 0
-    for line in tc_dict['dets']:
-        print('')
+            # Add line to line count
+            t_lines += 1
+
+    # Determine timecard status
+    status = 'I' # Default: (I)n Process
+    pe_date = None
+    query = \
+        f'SELECT TOP 1 * FROM {database}.dbo.PJLABHDR WHERE docnbr=\'{docnbr}\''
+    if sql_bool_test_query(query):
+        sql_data = sql_query(query)
+        for line in sql_data:
+            pe_date = time_helper.str_to_time(str(line.pe_date))
+
+    post_date = time_helper.get_post_date(pe_date)
+    cur_date = time_helper.get_cur_time()
+
+    if cur_date > post_date:
+        status = 'C'
+
+    # Construct update string
+    update_str = \
+        f'le_id06={str(t_hrs)}, le_id07={str(t_lines)}, le_status=\'{status}\''
+
+    # Construct filter string
+    filter_str = f'docnbr=\'{docnbr}\''
+
+    # Update values on PJLABHDR
+    try:
+        sql_update('PJLABHDR', update_str, filter_str)
+    except:
+        # Log to error dict during normal processing, but do not require
+        # parameters so rollup can be called from reverse_changes.
+        if user != '' and timecard != '':
+            error_handler.error_dict[user][timecard]['err'] = True
+        info_str = \
+            f'docnbr: {docnbr}, update_str: {update_str}, filters: {filter_str}'
+        error_handler.log_to_file('029', info_str)
+    else:
+        info_str = f'docnbr: {docnbr}'
+        error_handler.log_to_file('028', info_str)
 
 def sql_insert_line(tc_dict, user, timecard, proj_task, ex_docnbr, linenbr):
     # Inserts a line of data into PJLABDET
@@ -402,13 +447,14 @@ def sql_insert_line(tc_dict, user, timecard, proj_task, ex_docnbr, linenbr):
         sql_insert_dataset(tc_dict['dets'][proj_task], 'PJLABDET')
     except:
         # Log failed insert and stack trace
-        print(error_handler.error_msgs['004'] + proj_task)
-        traceback.print_exc()
+        # print(error_handler.error_msgs['004'] + proj_task)
+        # traceback.print_exc()
+        error_handler.error_dict[user][timecard][proj_task]['err'] = True
         error_handler.log_to_file('004', proj_task)
         error_handler.log_to_file('000', traceback.format_exc())
     else:
         # Log successful insert and update import status to true
-        print(error_handler.error_msgs['006'] + proj_task)
+        # print(error_handler.error_msgs['006'] + proj_task)
         error_handler.log_to_file('006', proj_task)
         ret_val = True
 
@@ -480,12 +526,13 @@ def sql_update_line(tc_dict, docnbr, linenbr, proj_task, project, task):
         sql_update('PJLABDET', update_str, filter)
     except:
         err_detail = f'Update string: {update_str}\nFilter: {filter}'
-        print(error_handler.error_msgs['024'] + err_detail)
-        traceback.print_exc()
+        # print(error_handler.error_msgs['024'] + err_detail)
+        # traceback.print_exc()
+        error_handler.error_dict[user][timecard][proj_task]['err'] = True
         error_handler.log_to_file('024', err_detail)
         error_handler.log_to_file('000', traceback.format_exc())
     else:
-        print(error_handler.error_msgs['025'] + proj_task)
+        # print(error_handler.error_msgs['025'] + proj_task)
         error_handler.log_to_file('025', proj_task)
         ret_val = True
 
@@ -507,13 +554,14 @@ def insert_timecard(user, timecard, tc_dict):
             sql_insert_dataset(tc_dict['hdr'], 'PJLABHDR')
         except:
             # Log error and stack trace
-            print(error_handler.error_msgs['003'] + str(pe_date))
-            traceback.print_exc()
+            # print(error_handler.error_msgs['003'] + str(pe_date))
+            # traceback.print_exc()
+            error_handler.error_dict[user][timecard]['err'] = True
             error_handler.log_to_file('003', str(pe_date))
             error_handler.log_to_file('000', traceback.format_exc())
         else:
             # Log success
-            print(error_handler.error_msgs['005'] + str(pe_date))
+            # print(error_handler.error_msgs['005'] + str(pe_date))
             error_handler.log_to_file('005', str(pe_date))
             error_handler.log_docnbr_insert(cur_docnbr)
     else:
@@ -525,12 +573,12 @@ def insert_timecard(user, timecard, tc_dict):
         # Check if existing docnbr is already marked (P)osted
         if status_posted_check(ex_docnbr):
             # Log error and do not proceed to line item import
-            print(error_handler.error_msgs['008'] + str(pe_date))
+            # print(error_handler.error_msgs['008'] + str(pe_date))
             error_handler.log_to_file('008', str(pe_date))
             timecard_posted = True
         else:
             # Log info message and proceed to import line items
-            print(error_handler.error_msgs['007'] + str(pe_date))
+            # print(error_handler.error_msgs['007'] + str(pe_date))
             error_handler.log_to_file('007', str(pe_date))
 
     # Insert line-item data
@@ -551,7 +599,7 @@ def insert_timecard(user, timecard, tc_dict):
         # Check if timecard is (P)osted. For logging line-item details.
         if timecard_posted == True:
             # Log error, do not insert or update.
-            print(error_handler.error_msgs['009'] + str(cur_twids))
+            # print(error_handler.error_msgs['009'] + str(cur_twids))
             error_handler.log_to_file('009', str(cur_twids))
             error_handler.error_dict[user][timecard][proj_task]['imported'] = \
                 'Posted'
@@ -560,7 +608,7 @@ def insert_timecard(user, timecard, tc_dict):
         # Check if project exists in SL. If not, do not insert or update.
         if not proj_check(cur_proj) and checks_passed == True:
             # Log error, do not insert or update
-            print(error_handler.error_msgs['001'] + cur_proj)
+            # print(error_handler.error_msgs['001'] + cur_proj)
             error_handler.log_to_file('001', cur_proj)
             checks_passed = False
 
@@ -568,7 +616,7 @@ def insert_timecard(user, timecard, tc_dict):
         if id_check(cur_twids):
             # Log error, update import status to true since ID already in SL,
             # do not insert or update.
-            print(error_handler.error_msgs['002'] + str(cur_twids))
+            # print(error_handler.error_msgs['002'] + str(cur_twids))
             error_handler.log_to_file('002', str(cur_twids))
             mark_imported = True
             checks_passed = False
@@ -577,7 +625,7 @@ def insert_timecard(user, timecard, tc_dict):
         if ex_docnbr != None and checks_passed == True:
             if line_check(cur_proj, cur_task):
                 # If line already exists, perform update instead of insert.
-                print(error_handler.error_msgs['023'] + str(cur_twids))
+                # print(error_handler.error_msgs['023'] + str(cur_twids))
                 error_handler.log_to_file('023', str(cur_twids))
                 operation = 'update'
 
@@ -601,23 +649,30 @@ def insert_timecard(user, timecard, tc_dict):
                     cur_proj, \
                     cur_task \
                 )
+        # else:
+            # error_handler.error_dict[user][timecard][proj_task]['err'] = True
 
         # Mark line imported if successful
         if mark_imported == True:
             error_handler.error_dict[user][timecard][proj_task]['imported']\
                 = True
 
+    # Adjust rollup values in PJLABHDR if detail lines were added to an
+    # existing timecard.
+    if ex_docnbr != None:
+        update_rollups(ex_docnbr, user, timecard)
+
 def insert_data(master_dict):
     # Takes a master dict of populated SQL table dicts and attempts to import
     for user in master_dict:
-        print(error_handler.error_msgs['019'] + str(user))
+        # print(error_handler.error_msgs['019'] + str(user))
         error_handler.log_to_file('019', str(user))
 
         # Initialize error dictionary for this user
         error_handler.error_dict[user] = {}
 
         for timecard in master_dict[user]:
-            print(error_handler.error_msgs['020'] + str(timecard))
+            # print(error_handler.error_msgs['020'] + str(timecard))
             error_handler.log_to_file('020', str(timecard))
 
             # Initialize error dictionary for this timecard

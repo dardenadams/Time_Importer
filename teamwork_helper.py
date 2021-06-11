@@ -58,7 +58,7 @@ def get_time():
 	# If no data found, returns None.
 	time_data = None
 
-	print(error_handler.error_msgs['012'])
+	# print(error_handler.error_msgs['012'])
 	error_handler.log_to_file('012', '')
 
 	# Get raw data
@@ -122,7 +122,7 @@ def get_project_details(all_projects):
 	start_time = time.time()
 	project_dets = {}
 
-	print(error_handler.error_msgs['013'])
+	# print(error_handler.error_msgs['013'])
 	error_handler.log_to_file('013', '')
 
 	# Iterate through list of projects
@@ -142,7 +142,7 @@ def get_project_details(all_projects):
 		    time.sleep(10)
 		    print('Resuming operation')
 
-		print(error_handler.error_msgs['010'] + str(proj))
+		# print(error_handler.error_msgs['010'] + str(proj))
 		error_handler.log_to_file('010', str(proj))
 
 		# Query details of each project
@@ -207,13 +207,13 @@ def construct_dict(time_dict, project_details):
 	# ----- Time Entry IDs (csv if more than one)
 	master_dict = {}
 
-	print(error_handler.error_msgs['014'])
+	# print(error_handler.error_msgs['014'])
 	error_handler.log_to_file('014', '')
 
 	# Iterate through time entries
 	for entry in time_dict:
 
-		print(error_handler.error_msgs['011'] + str(entry))
+		# print(error_handler.error_msgs['011'] + str(entry))
 		error_handler.log_to_file('011', str(entry))
 
 		# Get current entry's data
@@ -316,7 +316,7 @@ def get_teamwork_data():
 		teamwork_data = construct_dict(time_dict, project_details)
 
 	else:
-		print(error_handler.error_msgs['027'])
+		# print(error_handler.error_msgs['027'])
 		error_handler.log_to_file('027', '')
 
 	# print_tw_data(teamwork_data)
@@ -330,7 +330,7 @@ def put_tag_list(entry_ids, tag):
 	for id in entry_ids:
 		# For each item in CSV, update tag and log
 		info_msg =  f'ID: {id}, Tag: {tag}'
-		print(error_handler.error_msgs['021'] + info_msg)
+		# print(error_handler.error_msgs['021'] + info_msg)
 		error_handler.log_to_file('021',  info_msg)
 		put_tag(id, tag)
 
@@ -342,7 +342,7 @@ def put_tag_list(entry_ids, tag):
 
 def mark_items_imported(tw_dict):
 	# Marks items imported in Teamwork if they have the
-	print(error_handler.error_msgs['026'])
+	# print(error_handler.error_msgs['026'])
 	error_handler.log_to_file('026', '')
 
 	# Update Teamwork dict with current import status
@@ -371,5 +371,5 @@ def mark_items_imported(tw_dict):
 						entry_ids = str(entry_ids)
 						entry_ids = entry_ids.split(',')
 						for id in entry_ids:
-							print(error_handler.error_msgs['022'] + id)
+							# print(error_handler.error_msgs['022'] + id)
 							error_handler.log_to_file('022', id)

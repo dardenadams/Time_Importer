@@ -24,8 +24,9 @@ if __name__ == '__main__':
         # Mark items imported in Teamwork
         teamwork_helper.mark_items_imported(teamwork_data)
 
-    # Archive log files
+    # Archive log files and send alert email
     file_helper.archive_logs()
+    error_handler.email_results()
 
     # Uncomment to reverse changes logged in last run log files
     # error_handler.reverse_changes()

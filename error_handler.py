@@ -4,6 +4,7 @@ import file_helper
 import dynamics_helper
 import teamwork_helper
 import dictionaries
+import smtplib
 
 error_dict = {}
 
@@ -38,7 +39,9 @@ error_msgs = {
     '024': 'Failed to update line item: ',
     '025': 'Successfully updated line item: ',
     '026': 'Tagging imported items in Teamwork',
-    '027': 'No Teamwork time entries to import'
+    '027': 'No Teamwork time entries to import',
+    '028': 'Successfully updated rollup values for existing timecard. ',
+    '029': 'Failed to update rollup values for timecard. '
 }
 
 def log_to_file(error_id, detail_text):
@@ -79,32 +82,45 @@ def reverse_changes():
     docnbrs = file_helper.get_file_list(dictionaries.files[1])
     for nbr in docnbrs:
         if nbr != '':
+            print(f'Removing docnbr: {nbr}')
             dynamics_helper.del_whole_timecard(nbr)
-            print(nbr)
 
     # Get list of PJLABDET entries that were inserted and delete them
     print('Removing linenbrs, if any ...')
     linenbrs = file_helper.get_file_list(dictionaries.files[2])
     for doc_line in linenbrs:
         if doc_line != '':
+            print(f'Removing docnbr/linenbr: {doc_line}')
             doc_line_list = doc_line.split(':')
+
+            # Update values in PJLABDET
             dynamics_helper.del_pjlabdet_entry(\
-                doc_line_list[0], doc_line_list[1])
-            print(doc_line_list)
+                doc_line_list[0], # docnbr
+                doc_line_list[1]  # linenbr
+            )
+
+            # Fix rollup fields in PJLABHDR
+            dynamics_helper.update_rollups(doc_line_list[0])
 
     # Get list of PJLABDET entries that were updated and reverse changes
     print('Reversing linenbr updates, if any ...')
     linenbrs = file_helper.get_file_list(dictionaries.files[3])
     for doc_line in linenbrs:
         if doc_line != '':
+            print(\
+                f'Removing docnbr/linenbr/proj/task/day|time/notes: {doc_line}')
             doc_line_list = doc_line.split(':')
+
+            # Update values in PJLABDET
             dynamics_helper.undo_pjlabdet_entry(\
                 doc_line_list[0], # docnbr
                 doc_line_list[1], # project
                 doc_line_list[2], # task
                 doc_line_list[3], # day/time pairs list
                 doc_line_list[4]) # notes string
-            print(doc_line_list)
+
+            # Fix rollup fields in PJLABHDR
+            dynamics_helper.update_rollups(doc_line_list[0])
 
     # Get list of Teamwork time record IDs and replace 'Time Imported' tags
     # with 'Time Ready for Import' tags.
@@ -114,3 +130,37 @@ def reverse_changes():
         if id != '':
             teamwork_helper.put_tag(id, 'Time Ready for Import')
             print(id)
+
+def err_present():
+    # Returns true if any unhandled errors were logged.
+    # Errors will be logged if script fails on an update or insert to SQL.
+    result = False
+    for user in error_dict:
+        for timecard in error_dict[user]:
+            if 'err' in error_dict[user][timecard]:
+                result = True
+            for line in error_dict[user][timecard]:
+                if 'err' in error_dict[user][timecard][line]:
+                    result = True
+    return result
+
+def send_script_alert(subject, body):
+    # Sends a script alert email. Specify subject and body.
+    port = 25  # For SSL
+    smtp_server = "smtp.envirosys.com"
+    sender_email = "escscript@envirosys.com"  # Enter your address
+    receiver_email = "journal@envirosys.com"  # Enter receiver address
+    message = 'Subject: {}\n\n{}'.format(subject, body)
+
+    # context = ssl.create_default_context()
+    with smtplib.SMTP(smtp_server, port) as server:
+        # server.login(sender_email, password)
+        server.sendmail(sender_email, receiver_email, message)
+
+def email_results():
+    # Sends and email to admins alerting them of any errors
+    body = file_helper.get_file_content(dictionaries.files[0])
+    subject = 'Teamwork time import log'
+    if err_present():
+        subject = f'{subject} - unhandled errors recorded'
+    send_script_alert(subject, body)
