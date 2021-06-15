@@ -364,11 +364,13 @@ def pe_user_check(user_num, pe_date, database = sql_db):
             ret_val = item.docnbr
     return ret_val
 
-def line_check(proj, task, database = sql_db):
+def line_check(docnbr, proj, task, database = sql_db):
     # Returns true if project/task combination line already exists on timecard
     query = f'\
         SELECT TOP 1 * FROM {database}.dbo.PJLABDET \
-        WHERE pjt_entity=\'{task}\' AND project=\'{proj}\''
+        WHERE docnbr=\'{docnbr}\' \
+        AND pjt_entity=\'{task}\' \
+        AND project=\'{proj}\''
     return sql_bool_test_query(query, database)
 
 def replace_docnbr(timecard, new_docnbr):
@@ -440,7 +442,7 @@ def sql_insert_line(tc_dict, user, timecard, proj_task, ex_docnbr, linenbr):
     # If timecard already existed, we need to log docnbr/linenbr
     # combination in case changes must be reversed.
     if ex_docnbr != None:
-        error_handler.log_linenbr_insert(ex_docnbr, cur_linenbr)
+        error_handler.log_linenbr_insert(ex_docnbr, linenbr)
 
     try:
         # Attempt insert
@@ -579,7 +581,7 @@ def insert_timecard(user, timecard, tc_dict):
         else:
             # Log info message and proceed to import line items
             # print(error_handler.error_msgs['007'] + str(pe_date))
-            error_handler.log_to_file('007', str(pe_date))
+            error_handler.log_to_file('007', '')
 
     # Insert line-item data
     for proj_task in tc_dict['dets']:
@@ -623,7 +625,7 @@ def insert_timecard(user, timecard, tc_dict):
 
         # Determine if update or insert should be performed
         if ex_docnbr != None and checks_passed == True:
-            if line_check(cur_proj, cur_task):
+            if line_check(ex_docnbr, cur_proj, cur_task):
                 # If line already exists, perform update instead of insert.
                 # print(error_handler.error_msgs['023'] + str(cur_twids))
                 error_handler.log_to_file('023', str(cur_twids))

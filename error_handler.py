@@ -18,7 +18,7 @@ error_msgs = {
     '005': 'Successfully imported header item: ',
     '006': 'Successfully imported line item: ',
     '007': 'Timecard already present in SL, but not posted. Skipping ' +\
-        'timecard import and proceeding to line items: ',
+        'timecard import and proceeding to line items ...',
     '008': 'Timecard already present in SL and posted. Skipping import for ' +\
         'timecard: ',
     '009': 'Skipping import for timecard line item: ',
@@ -40,7 +40,7 @@ error_msgs = {
     '025': 'Successfully updated line item: ',
     '026': 'Tagging imported items in Teamwork',
     '027': 'No Teamwork time entries to import',
-    '028': 'Successfully updated rollup values for existing timecard. ',
+    '028': 'Successfully updated rollup values for existing timecard, ',
     '029': 'Failed to update rollup values for timecard. '
 }
 
