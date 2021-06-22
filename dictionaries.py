@@ -83,7 +83,7 @@ pjlabhdr = {
 	'le_id09': '1900-01-01 00:00:00',
 	'le_id10': 0, # 0 or 1 = 'Transmit status'; Try 0, see what happens?
 	'le_key': '', # Used for corrections
-	'le_status': 'C', # (C)ompleted status; ready for approval
+	'le_status': 'C', # (I)n Process or (C)ompleted status
 	'le_type': 'R', # (R)egular (not a (C)orrection)
 	'lupd_datetime': 'set_cur_time',
 	'lupd_prog': 'SCRIPT',

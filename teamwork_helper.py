@@ -58,18 +58,21 @@ def get_time():
 	# If no data found, returns None.
 	time_data = None
 
-	# print(error_handler.error_msgs['012'])
+	print(error_handler.error_msgs['012'])
 	error_handler.log_to_file('012', '')
 
 	# Get raw data
 	time_url = url_helper.construct_url('time', 'v3')
+	# print(time_url)
 	raw_data = get_data(time_url)
-    # print(raw_data)
+	# print(raw_data)
+	count = 0
 
-    # Iterate through raw data and extract what we need
+	# Iterate through raw data and extract what we need
 	if 'timelogs' in raw_data:
 		time_data = {}
 		for entry in raw_data['timelogs']:
+			count += 1
 			cur_id = entry['id']
 			cur_pj = entry['project']['id']
 			cur_user = entry['userId']
@@ -84,7 +87,8 @@ def get_time():
 			time_data[cur_id]['date_time'] = cur_dt
 			time_data[cur_id]['minutes'] = cur_mins
 			time_data[cur_id]['description'] = cur_desc
-
+	print(error_handler.error_msgs['030'] + str(count))
+	error_handler.log_to_file('030', str(count))
 	return time_data
 
 def print_time_proj():
@@ -122,7 +126,7 @@ def get_project_details(all_projects):
 	start_time = time.time()
 	project_dets = {}
 
-	# print(error_handler.error_msgs['013'])
+	print(error_handler.error_msgs['013'])
 	error_handler.log_to_file('013', '')
 
 	# Iterate through list of projects
@@ -135,14 +139,17 @@ def get_project_details(all_projects):
 		    elapsed_time = 1
 		proc_rate = count / elapsed_time * 60
 		if count > 125 and proc_rate > 125:
-		    print('Reached process rate limit, pausing for 10 seconds ...')
-		    print('Current rate: ' + str(proc_rate))
-		    print('Total time elapsed: ' + str(elapsed_time) + ' seconds')
-		    print('Total records processed: ' + str(count))
-		    time.sleep(10)
-		    print('Resuming operation')
+			info_msg = \
+				f'\nCurrent rate: {str(proc_rate)}' + \
+				f'\nTotal time elapsed: {str(elapsed_time)} seconds' + \
+				f'\nTotal records processed: {str(count)}'
+			print(error_handler.error_msgs['031'] + info_msg)
+			error_handler.log_to_file('031', info_msg)
+			time.sleep(10)
+			print(error_handler.error_msgs['032'])
+			error_handler.log_to_file('032', '')
 
-		# print(error_handler.error_msgs['010'] + str(proj))
+		print(error_handler.error_msgs['010'] + str(proj))
 		error_handler.log_to_file('010', str(proj))
 
 		# Query details of each project
@@ -182,16 +189,16 @@ def get_project_details(all_projects):
 	return project_dets
 
 def get_user_email(user_id):
-    # Returns a user's email from Teamwork
-    people_url = url_helper.construct_url('people', 'v1', user_id)
-    raw_data = get_data(people_url)
-    email_address = None
+	# Returns a user's email from Teamwork
+	people_url = url_helper.construct_url('people', 'v1', user_id)
+	raw_data = get_data(people_url)
+	email_address = None
 
-    # Retrieve email
-    if 'person' in raw_data:
-        if 'email-address' in raw_data['person']:
-            email_address = raw_data['person']['email-address']
-    return email_address
+	# Retrieve email
+	if 'person' in raw_data:
+	    if 'email-address' in raw_data['person']:
+	        email_address = raw_data['person']['email-address']
+	return email_address
 
 def construct_dict(time_dict, project_details):
 	# Returns dictionary of time entries structured by Dynamics User ID
@@ -207,28 +214,45 @@ def construct_dict(time_dict, project_details):
 	# ----- Time Entry IDs (csv if more than one)
 	master_dict = {}
 
-	# print(error_handler.error_msgs['014'])
+	# Dicts to hold discovered user IDs and numbers. Saves processing time
+	# by eliminating need to query Teamwork repeatedly for the same IDs.
+	# TW user IDs are keys, Dynamics user IDs/numbers are values.
+	user_id_dict = {}
+	user_num_dict = {}
+
+	print(error_handler.error_msgs['014'])
 	error_handler.log_to_file('014', '')
 
 	# Iterate through time entries
 	for entry in time_dict:
 
-		# print(error_handler.error_msgs['011'] + str(entry))
+		print(error_handler.error_msgs['011'] + str(entry))
 		error_handler.log_to_file('011', str(entry))
 
 		# Get current entry's data
 		tw_proj_id = time_dict[entry]['project']
-		tw_user_id = time_dict[entry]['user']
 		tw_entry_ids = entry
 		dyn_proj_id = project_details[tw_proj_id]['SL ID']
-		dyn_user_id = dynamics_helper.get_user_info(tw_user_id, 'id')
-		dyn_user_num = dynamics_helper.get_user_info(tw_user_id, 'num')
 		task_code = project_details[tw_proj_id]['Task Code']
 		date_time = time_dict[entry]['date_time']
 		pe_date = time_helper.get_pe_date(date_time) # Calc period end date
 		day = 'day' + str(dictionaries.day_map[date_time.weekday()]) + '_hr1'
 		proj_task = dyn_proj_id + '-' + task_code
 		minutes = time_dict[entry]['minutes']
+
+		# Check if user ID/number has been found already before querying TW.
+		# If ID/number hasn't been found yet, query and add to dicts.
+		tw_user_id = time_dict[entry]['user']
+		dyn_user_id = None
+		dyn_user_num = None
+		if tw_user_id in user_id_dict and tw_user_id in user_num_dict:
+			dyn_user_id = user_id_dict[tw_user_id]
+			dyn_user_num = user_num_dict[tw_user_id]
+		else:
+			dyn_user_id = dynamics_helper.get_user_info(tw_user_id, 'id')
+			user_id_dict[tw_user_id] = dyn_user_id
+			dyn_user_num = dynamics_helper.get_user_info(tw_user_id, 'num')
+			user_num_dict[tw_user_id] = dyn_user_num
 
 		# Proceed to add to master dict only if Dynamics Project Number and
 		# Task Code are properly populated
@@ -301,6 +325,9 @@ def get_teamwork_data():
 	# and SL user IDs
 	teamwork_data = None
 
+	print(error_handler.error_msgs['036'] + dynamics_helper.sql_db)
+	error_handler.log_to_file('036', dynamics_helper.sql_db)
+
 	# Get time ready for import
 	time_dict = get_time()
 
@@ -316,7 +343,7 @@ def get_teamwork_data():
 		teamwork_data = construct_dict(time_dict, project_details)
 
 	else:
-		# print(error_handler.error_msgs['027'])
+		print(error_handler.error_msgs['027'])
 		error_handler.log_to_file('027', '')
 
 	# print_tw_data(teamwork_data)
@@ -327,10 +354,29 @@ def put_tag_list(entry_ids, tag):
 	entry_ids = str(entry_ids)
 	entry_ids = entry_ids.split(',') # IDs are CSV
 
+	start_time = time.time()
+	count = 1
+
 	for id in entry_ids:
+		# Pause processing if necessary to avoid server refusing connection
+		elapsed_time = time.time() - start_time
+		if elapsed_time == 0:
+		    elapsed_time = 1
+		proc_rate = count / elapsed_time * 60
+		if count > 50 and proc_rate > 100:
+			info_msg = \
+				f'\nCurrent rate: {str(proc_rate)}' + \
+				f'\nTotal time elapsed: {str(elapsed_time)} seconds' + \
+				f'\nTotal records processed: {str(count)}'
+			print(error_handler.error_msgs['031'] + info_msg)
+			error_handler.log_to_file('031', info_msg)
+			time.sleep(10)
+			print(error_handler.error_msgs['032'])
+			error_handler.log_to_file('032', '')
+
 		# For each item in CSV, update tag and log
 		info_msg =  f'ID: {id}, Tag: {tag}'
-		# print(error_handler.error_msgs['021'] + info_msg)
+		print(error_handler.error_msgs['021'] + info_msg)
 		error_handler.log_to_file('021',  info_msg)
 		put_tag(id, tag)
 
@@ -340,9 +386,12 @@ def put_tag_list(entry_ids, tag):
 		if tag == 'Time Imported':
 			error_handler.log_twid_import(id)
 
+		# Advance counter to avoid Teamwork request limits
+		count += 1
+
 def mark_items_imported(tw_dict):
 	# Marks items imported in Teamwork if they have the
-	# print(error_handler.error_msgs['026'])
+	print(error_handler.error_msgs['026'])
 	error_handler.log_to_file('026', '')
 
 	# Update Teamwork dict with current import status
@@ -371,5 +420,5 @@ def mark_items_imported(tw_dict):
 						entry_ids = str(entry_ids)
 						entry_ids = entry_ids.split(',')
 						for id in entry_ids:
-							# print(error_handler.error_msgs['022'] + id)
+							print(error_handler.error_msgs['022'] + id)
 							error_handler.log_to_file('022', id)

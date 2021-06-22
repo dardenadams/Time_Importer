@@ -18,8 +18,9 @@ time_url_params = {
     'includeArchivedProjects': 'true',
     'orderby': 'project',
     'orderMode': 'asc',
-    'projectStatus': 'active',
+    #'projectStatus': 'active',
     'showDeleted': 'false',
+    'pageSize': '1000',
     'tagIds': '96968' # 96968 = Time Ready for Import, 96888 = Time Imported
 }
 

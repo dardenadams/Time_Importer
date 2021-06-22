@@ -6,6 +6,10 @@ import teamwork_helper
 import dictionaries
 import smtplib
 
+# Accounting contact who will receive alerts when projects need to be imported
+# to Dynamics.
+accounting_contact = 'mjolly@escspectrum.com'
+
 error_dict = {}
 
 error_msgs = {
@@ -18,7 +22,7 @@ error_msgs = {
     '005': 'Successfully imported header item: ',
     '006': 'Successfully imported line item: ',
     '007': 'Timecard already present in SL, but not posted. Skipping ' +\
-        'timecard import and proceeding to line items ...',
+        'timecard import and proceeding to line items: ',
     '008': 'Timecard already present in SL and posted. Skipping import for ' +\
         'timecard: ',
     '009': 'Skipping import for timecard line item: ',
@@ -41,7 +45,14 @@ error_msgs = {
     '026': 'Tagging imported items in Teamwork',
     '027': 'No Teamwork time entries to import',
     '028': 'Successfully updated rollup values for existing timecard, ',
-    '029': 'Failed to update rollup values for timecard. '
+    '029': 'Failed to update rollup values for timecard. ',
+    '030': 'Total time records marked for import: ',
+    '031': 'Reached process rate limit, pausing for 10 seconds ...',
+    '032': 'Resuming operation',
+    '033': 'Failed to update import status (le_status): ',
+    '034': 'Updated import status (le_status): ',
+    '035': 'Assigned linenbr info: ',
+    '036': 'Running import on SQL database: '
 }
 
 def log_to_file(error_id, detail_text):
@@ -139,23 +150,50 @@ def err_present():
         for timecard in error_dict[user]:
             if 'err' in error_dict[user][timecard]:
                 result = True
-            for line in error_dict[user][timecard]:
-                if 'err' in error_dict[user][timecard][line]:
-                    result = True
+            for proj_task in error_dict[user][timecard]:
+                if proj_task != 'proj_missing':
+                    if 'err' in error_dict[user][timecard][proj_task]:
+                        result = True
     return result
 
-def send_script_alert(subject, body):
+def msg_to_accounting():
+    # Generates email message text to Accounting detailing each project
+    # that's missing from SL database.
+    msg_str = 'The following projects are missing from Dynamics, ' +\
+        'preventing time from being logged: '
+    result = False
+    for user in error_dict:
+        for timecard in error_dict[user]:
+            for proj_task in error_dict[user][timecard]:
+                if proj_task != 'proj_missing':
+                    if error_dict[user][timecard][proj_task]['proj_missing'] \
+                    == True:
+                        proj = error_dict[user][timecard][proj_task]['proj_num']
+                        if not proj in msg_str:
+                            msg_str = f'{msg_str}\n{proj}'
+                            result = True
+    if result == True:
+        return msg_str
+    else:
+        return None
+
+def send_script_alert(\
+    subject, \
+    body, \
+    to_email = 'journal@envirosys.com', \
+    from_email = 'escscript@envirosys.com'):
     # Sends a script alert email. Specify subject and body.
-    port = 25  # For SSL
-    smtp_server = "smtp.envirosys.com"
-    sender_email = "escscript@envirosys.com"  # Enter your address
-    receiver_email = "journal@envirosys.com"  # Enter receiver address
+
+    port = 25  # For SSL, specify 465
+    smtp_server = 'smtp.envirosys.com'
+    # from_email = 'escscript@envirosys.com'  # Enter your address
+    # to_email = 'dadams@escspectrum.com'  # Enter receiver address
     message = 'Subject: {}\n\n{}'.format(subject, body)
 
     # context = ssl.create_default_context()
     with smtplib.SMTP(smtp_server, port) as server:
         # server.login(sender_email, password)
-        server.sendmail(sender_email, receiver_email, message)
+        server.sendmail(from_email, to_email, message)
 
 def email_results():
     # Sends and email to admins alerting them of any errors
@@ -164,3 +202,10 @@ def email_results():
     if err_present():
         subject = f'{subject} - unhandled errors recorded'
     send_script_alert(subject, body)
+
+    # Send alert accounting if time failed to import due to project missing
+    # from Dynamics database.
+    body = msg_to_accounting()
+    subject = 'Please add projects to Dynamics'
+    if body != None:
+        send_script_alert(subject, body, accounting_contact)

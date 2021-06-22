@@ -158,6 +158,10 @@ def map_table(sql_dict, \
                 # Get the next linenbr
                 sql_dict[sql_key] = \
                     dynamics_helper.get_next_linenbr(line, cur_docnbr)
+                # info_msg = f'line count: {line}, ' + \
+                #     f'linenbr returned: {sql_dict[sql_key]}'
+                # print(error_handler.error_msgs['035'] + info_msg)
+                # error_handler.log_to_file('035', info_msg)
 
             elif key_val == 'set_task':
                 # Get the task code
@@ -196,6 +200,9 @@ def create_master_dict(tw_data):
     print(error_handler.error_msgs['015'])
     error_handler.log_to_file('015', '')
 
+    # Counter to keep track of pe_date rows. Used to calculate docnbr.
+    row = 0
+
     # Iterate through users
     for user_id in tw_data:
 
@@ -204,49 +211,49 @@ def create_master_dict(tw_data):
 
         # Create dict to hold all users
         master_dict[user_id] = {}
-        row = 0
 
-    # Iterate through week entries (organized by period end dates)
-    for pe_date in tw_data[user_id]:
-        row += 1 # Keeps track of timecard count for docnbr calc
+        # Iterate through week entries (organized by period end dates)
+        for pe_date in tw_data[user_id]:
 
-        # Keep in mind user number is at top level
-        if not pe_date == 'user_num':
-            # Map tables
+            # Keep in mind user number is at top level
+            if not pe_date == 'user_num':
+                # Map tables
 
-            # Create dict to hold time header and line entries
-            master_dict[user_id][pe_date] = {}
-            master_dict[user_id][pe_date]['dets'] = {}
+                row += 1 # Keeps track of timecard count for docnbr calc
 
-            # Create header entry for week
-            print(error_handler.error_msgs['017'] + str(pe_date))
-            error_handler.log_to_file('017', str(pe_date))
-            pjlabhdr = dict(dictionaries.pjlabhdr) # Copy of dictionary!
-            master_dict[user_id][pe_date]['hdr'] = \
-                map_table(pjlabhdr, tw_data, user_id, pe_date, row)
+                # Create dict to hold time header and line entries
+                master_dict[user_id][pe_date] = {}
+                master_dict[user_id][pe_date]['dets'] = {}
 
-             # Keep track of linenbr. Linenbr + docnbr must be unique, but
-             # linenbr may be duplicated so long as docnbr is different.
-             # Therefore, restart count for each docnbr (timecard).
-            line = 0
+                # Create header entry for week
+                print(error_handler.error_msgs['017'] + str(pe_date))
+                error_handler.log_to_file('017', str(pe_date))
+                pjlabhdr = dict(dictionaries.pjlabhdr) # Copy of dictionary!
+                master_dict[user_id][pe_date]['hdr'] = \
+                    map_table(pjlabhdr, tw_data, user_id, pe_date, row)
 
-            # Iterate through line items (organized by proj/task)
-            for proj_task in tw_data[user_id][pe_date]:
-                line += 1
+                 # Keep track of linenbr. Linenbr + docnbr must be unique, but
+                 # linenbr may be duplicated so long as docnbr is different.
+                 # Therefore, restart count for each docnbr (timecard).
+                line = 0
 
-                # Create time entry line item
-                print(error_handler.error_msgs['018'] + proj_task)
-                error_handler.log_to_file('018', proj_task)
-                pjlabdet = dict(dictionaries.pjlabdet)
-                master_dict[user_id][pe_date]['dets'][proj_task] = \
-                    map_table( \
-                        pjlabdet, \
-                        tw_data,  \
-                        user_id,  \
-                        pe_date,  \
-                        row,      \
-                        line,
-                        proj_task \
-                    )
+                # Iterate through line items (organized by proj/task)
+                for proj_task in tw_data[user_id][pe_date]:
+                    line += 1
+
+                    # Create time entry line item
+                    print(error_handler.error_msgs['018'] + proj_task)
+                    error_handler.log_to_file('018', proj_task)
+                    pjlabdet = dict(dictionaries.pjlabdet)
+                    master_dict[user_id][pe_date]['dets'][proj_task] = \
+                        map_table( \
+                            pjlabdet, \
+                            tw_data,  \
+                            user_id,  \
+                            pe_date,  \
+                            row,      \
+                            line,
+                            proj_task \
+                        )
     # print_master_dict(master_dict)
     return master_dict
