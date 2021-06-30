@@ -635,6 +635,9 @@ def insert_timecard(user, timecard, tc_dict):
         error_handler.error_dict[user][timecard][proj_task]['proj_missing']\
             = False
 
+        # Truncate Teamwork IDs string if longer than 30 chars
+        tc_dict['dets'][proj_task]['ld_desc'] = cur_twids[:30]
+
         # Check if timecard is (P)osted. For logging line-item details.
         if timecard_posted == True:
             # Log error, do not insert or update.
