@@ -209,6 +209,11 @@ def create_master_dict(tw_data):
         print(error_handler.error_msgs['016'] + user_id)
         error_handler.log_to_file('016', user_id)
 
+        # If user is Eric Prater, override default approver
+        if user_id == 'EPRATER':
+            dictionaries.approver_num = 1041
+            dictionaries.approver_id = 'BFOWLER'
+
         # Create dict to hold all users
         master_dict[user_id] = {}
 
