@@ -5,10 +5,11 @@ import dynamics_helper
 import teamwork_helper
 import dictionaries
 import smtplib
+import time
 
 # Accounting contact who will receive alerts when projects need to be imported
 # to Dynamics.
-accounting_contact = 'mjolly@escspectrum.com'
+accounting_contact = 'mdiloreto@escspectrum.com'
 
 error_dict = {}
 
@@ -137,10 +138,28 @@ def reverse_changes():
     # with 'Time Ready for Import' tags.
     print('Tagging Teamwork time records \'Ready for Import\' ...')
     twids = file_helper.get_file_list(dictionaries.files[4])
+    # twids = twids.splitlines()
+    start_time = time.time()
+    count = 1
     for id in twids:
         if id != '':
-            teamwork_helper.put_tag(id, 'Time Ready for Import')
-            print(id)
+            # Pause processing if necessary to avoid server refusing connection
+            elapsed_time = time.time() - start_time
+            if elapsed_time == 0:
+                elapsed_time = 1
+            proc_rate = count / elapsed_time * 60
+            if count > 50 and proc_rate > 50:
+            	info_msg = \
+            		f'\nCurrent rate: {str(proc_rate)}' + \
+            		f'\nTotal time elapsed: {str(elapsed_time)} seconds' + \
+            		f'\nTotal records processed: {str(count)}'
+            	print(error_msgs['031'] + info_msg)
+            	time.sleep(10)
+            	print(error_msgs['032'])
+
+            teamwork_helper.put_tag(id, 'Time Ready to Import')
+            print('id: ' + id)
+            count += 1
 
 def err_present():
     # Returns true if any unhandled errors were logged.
@@ -209,3 +228,36 @@ def email_results():
     subject = 'Please add projects to Dynamics'
     if body != None:
         send_script_alert(subject, body, accounting_contact)
+
+def mark_imported():
+    # Marks time entries from file imported (for cleanup if failed)
+    tag = 'Time Imported'
+    twids = file_helper.get_file_list(dictionaries.files[4])
+
+    start_time = time.time()
+    count = 1
+
+    for id in twids:
+        # Pause processing if necessary to avoid server refusing connection
+        elapsed_time = time.time() - start_time
+        if elapsed_time == 0:
+            elapsed_time = 1
+        proc_rate = count / elapsed_time * 60
+        print('Process rate: ' + str(proc_rate))
+        print('Count: ' + str(count))
+        if count > 50 and proc_rate > 50:
+        	info_msg = \
+        		f'\nCurrent rate: {str(proc_rate)}' + \
+        		f'\nTotal time elapsed: {str(elapsed_time)} seconds' + \
+        		f'\nTotal records processed: {str(count)}'
+        	print(error_msgs['031'] + info_msg)
+        	time.sleep(10)
+        	print(error_msgs['032'])
+
+        # For each item in CSV, update tag
+        info_msg =  f'ID: {id}, Tag: {tag}'
+        print(error_msgs['021'] + info_msg)
+        teamwork_helper.put_tag(id, tag)
+
+        # Advance counter to avoid Teamwork request limits
+        count += 1

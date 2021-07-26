@@ -363,7 +363,9 @@ def put_tag_list(entry_ids, tag):
 		if elapsed_time == 0:
 		    elapsed_time = 1
 		proc_rate = count / elapsed_time * 60
-		if count > 50 and proc_rate > 100:
+		print('Process rate: ' + str(proc_rate))
+		print('Count: ' + str(count))
+		if count > 50 and proc_rate > 50:
 			info_msg = \
 				f'\nCurrent rate: {str(proc_rate)}' + \
 				f'\nTotal time elapsed: {str(elapsed_time)} seconds' + \

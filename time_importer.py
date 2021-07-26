@@ -4,6 +4,8 @@ import maps
 import datetime
 import error_handler
 import file_helper
+import dictionaries
+import time
 
 if __name__ == '__main__':
     # Clear log files
@@ -30,3 +32,6 @@ if __name__ == '__main__':
 
     # Uncomment to reverse changes logged in last run log files
     # error_handler.reverse_changes()
+
+    # Uncomment to mark Teamwork time logs imported again in case of failure
+    # error_handler.mark_imported()
