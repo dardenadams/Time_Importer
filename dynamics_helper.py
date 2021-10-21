@@ -489,7 +489,7 @@ def sql_insert_line(tc_dict, user, timecard, proj_task, ex_docnbr, linenbr):
 
     return ret_val
 
-def sql_update_line(tc_dict, docnbr, linenbr, proj_task, project, task):
+def sql_update_line(tc_dict, docnbr, linenbr, proj_task, project, task, user):
     # Updates hours, dollar amount, and notes data for a project/task line item
     ret_val = False
 
@@ -536,6 +536,7 @@ def sql_update_line(tc_dict, docnbr, linenbr, proj_task, project, task):
     if cur_notes != '':
         cur_notes = f'{cur_notes},'
     new_notes = f'{cur_notes}{tw_ids}'
+    new_notes = new_notes[:30] # Truncate longer than 30 chars
     update_str = f'{update_str}, ld_desc=\'{new_notes}\''
 
     # Log notes changes to be added
@@ -695,7 +696,8 @@ def insert_timecard(user, timecard, tc_dict):
                     cur_linenbr, \
                     proj_task, \
                     cur_proj, \
-                    cur_task \
+                    cur_task, \
+                    user \
                 )
         # else:
             # error_handler.error_dict[user][timecard][proj_task]['err'] = True
