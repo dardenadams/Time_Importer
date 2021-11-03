@@ -31,6 +31,14 @@ def get_pe_date(input_date):
 
 	return pe_date
 
+def modify_pe_date(pe_date):
+    # Takes input pe_date and alters it to ddmmyyy format
+    month = pe_date.strftime("%m")
+    day = pe_date.strftime("%d")
+    year = pe_date.strftime("%Y")
+
+    return f'{month}{day}{year}'
+
 def to_central_tz(timestamp):
 	# Converts raw timestamp data to DST adjusted central time
 

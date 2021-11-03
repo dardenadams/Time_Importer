@@ -73,7 +73,6 @@ def print_master_dict(master_dict):
                         str(master_dict[user_id][pe_date]['dets']\
                             [line][l_item]))
 
-
 def map_table(sql_dict, \
     tw_dict, \
     user_id, \
@@ -237,14 +236,21 @@ def create_master_dict(tw_data):
                 master_dict[user_id][pe_date]['hdr'] = \
                     map_table(pjlabhdr, tw_data, user_id, pe_date, row)
 
-                 # Keep track of linenbr. Linenbr + docnbr must be unique, but
-                 # linenbr may be duplicated so long as docnbr is different.
-                 # Therefore, restart count for each docnbr (timecard).
+                # Build list of all TW IDs to be imported
+                # tw_ids_total = None
+
+                # Keep track of linenbr. Linenbr + docnbr must be unique, but
+                # linenbr may be duplicated so long as docnbr is different.
+                # Therefore, restart count for each docnbr (timecard).
                 line = 0
 
                 # Iterate through line items (organized by proj/task)
                 for proj_task in tw_data[user_id][pe_date]:
                     line += 1
+
+                    # Add IDs to tw_ids list
+                    # tw_ids_total = f'{tw_ids_total},' + \
+                    #     f'{tw_data[user_id][pe_date][proj_task]['tw_ids']}'
 
                     # Create time entry line item
                     print(error_handler.error_msgs['018'] + proj_task)
@@ -257,8 +263,14 @@ def create_master_dict(tw_data):
                             user_id,  \
                             pe_date,  \
                             row,      \
-                            line,
+                            line,     \
                             proj_task \
                         )
+
+                # Create notes entry
+                # pjnotes = dict(dictionaries.pjnotes)
+                # master_dict[user_id][pe_date]['note'] = \
+                #     map_table(pjnotes, tw_data, user_id, pe_date, row)
+
     # print_master_dict(master_dict)
     return master_dict

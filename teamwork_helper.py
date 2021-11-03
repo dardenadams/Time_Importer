@@ -223,6 +223,9 @@ def construct_dict(time_dict, project_details):
 	print(error_handler.error_msgs['014'])
 	error_handler.log_to_file('014', '')
 
+	# CSV to keep track of any IDs already imported
+	imported_ids = ''
+
 	# Iterate through time entries
 	for entry in time_dict:
 
@@ -254,9 +257,22 @@ def construct_dict(time_dict, project_details):
 			dyn_user_num = dynamics_helper.get_user_info(tw_user_id, 'num')
 			user_num_dict[tw_user_id] = dyn_user_num
 
+		# Check if time entry has been previously imported. Save imported IDs
+		# to tag them properly in Teamwork.
+		id_imported = dynamics_helper.id_check(entry)
+		if id_imported == True:
+			print(error_handler.error_msgs['002'] + str(entry))
+			error_handler.log_to_file('002', str(entry))
+			if imported_ids != '':
+				imported_ids = f'{imported_ids},{entry}'
+			else:
+				imported_ids = entry
+
 		# Proceed to add to master dict only if Dynamics Project Number and
-		# Task Code are properly populated
-		if dyn_proj_id != 'No Data' and task_code != 'No Data':
+		# Task Code are properly populated and ID check is passed.
+		if dyn_proj_id != 'No Data' \
+		and task_code != 'No Data' \
+		and id_imported == False:
 
 			# Add user ID dict to master dict if it doesn't already exist
 			if not dyn_user_id in master_dict:
@@ -303,6 +319,18 @@ def construct_dict(time_dict, project_details):
 				False
 			# master_dict[dyn_user_id][pe_date][proj_task]['description'] = \
 			#     time_dict[entry]['description']
+
+	# Properly tag any IDs that were already imported
+	if imported_ids != '':
+		print(error_handler.error_msgs['037'])
+		error_handler.log_to_file('031', '')
+		time.sleep(60)
+		tag = 'Time Imported'
+		start_time = time.time()
+		count = 1
+		put_tag_list(imported_ids, tag, start_time, count)
+
+	# Return structured dictionary of time entries ready for import
 	return master_dict
 
 def print_tw_data(tw_data):
@@ -349,13 +377,10 @@ def get_teamwork_data():
 	# print_tw_data(teamwork_data)
 	return teamwork_data
 
-def put_tag_list(entry_ids, tag):
+def put_tag_list(entry_ids, tag, start_time, count):
 	# Takes a CSV list of entry IDs and puts the specified tag on them
 	entry_ids = str(entry_ids)
 	entry_ids = entry_ids.split(',') # IDs are CSV
-
-	start_time = time.time()
-	count = 1
 
 	for id in entry_ids:
 		# Pause processing if necessary to avoid server refusing connection
@@ -380,7 +405,7 @@ def put_tag_list(entry_ids, tag):
 		info_msg =  f'ID: {id}, Tag: {tag}'
 		print(error_handler.error_msgs['021'] + info_msg)
 		error_handler.log_to_file('021',  info_msg)
-		put_tag(id, tag)
+		#put_tag(id, tag)
 
 		# Log ID if status is imported in case changes must be reversed.
 		# No need to log IDs for items tagged Posted; do not need to try
@@ -390,11 +415,15 @@ def put_tag_list(entry_ids, tag):
 
 		# Advance counter to avoid Teamwork request limits
 		count += 1
+	return count
 
 def mark_items_imported(tw_dict):
 	# Marks items imported in Teamwork if they have the
 	print(error_handler.error_msgs['026'])
 	error_handler.log_to_file('026', '')
+
+	start_time = time.time()
+	count = 1
 
 	# Update Teamwork dict with current import status
 	for user in tw_dict:
@@ -412,11 +441,15 @@ def mark_items_imported(tw_dict):
 
 					# Update import status
 					if imp_status == True:
-						put_tag_list(entry_ids, 'Time Imported')
+						# Pass value of count and set new value of count
+						# based on returned value to maintain list across
+						# iterations.
+						count = put_tag_list( \
+							entry_ids, 'Time Imported', start_time, count)
 
 					elif imp_status == 'Posted':
 						tag = 'Time Not Imported - Posted Timecard'
-						put_tag_list(entry_ids, tag)
+						count = put_tag_list(entry_ids, tag, start_time, count)
 
 					else:
 						entry_ids = str(entry_ids)

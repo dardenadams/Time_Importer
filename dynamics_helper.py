@@ -78,18 +78,18 @@ def sql_get_hrs(docnbr, proj, task, col, database = sql_db):
             ret_val = getattr(item, col)
     return ret_val
 
-def sql_get_notes(docnbr, proj, task, database = sql_db):
-    # Returns the current notes value for specified line item from
-    ret_val = None
+def sql_get_notes(key_val, database = sql_db):
+    # Returns the current notes value for specified key value
+    ret_val = {}
     query = f'\
-        SELECT TOP 1 * FROM {database}.dbo.PJLABDET \
-        WHERE docnbr=\'{docnbr}\' \
-        AND project=\'{proj}\' \
-        AND pjt_entity=\'{task}\''
+        SELECT TOP 1 * FROM {database}.dbo.PJNOTES \
+        WHERE key_value=\'{key_val}\''
     if sql_bool_test_query(query, database):
         sql_data = sql_query(query, database)
         for item in sql_data:
-            ret_val = (item.ld_desc).strip()
+            ret_val['notes1'] = (item.notes1).strip()
+            ret_val['notes2'] = (item.notes2).strip()
+            ret_val['notes3'] = (item.notes3).strip()
     return ret_val
 
 def del_whole_timecard(docnbr, database = sql_db):
@@ -149,15 +149,6 @@ def undo_pjlabdet_entry(docnbr, proj, task, day_list, notes, database = sql_db):
         update_str = f'{update_str}{day_col}={str(new_hrs)}'
 
         count += 1
-
-    # Add notes
-    sub_chars = len(notes) # Number of characters to subtract
-    cur_notes = sql_get_notes(docnbr, proj, task) # Current notes string
-    cur_len = len(cur_notes) # Number of characters in current notes string
-    if cur_len > sub_chars:
-        sub_chars += 1 # Remove preceeding comma too if necessary
-    new_notes = cur_notes[:cur_len - sub_chars] # Subtract chars from notes
-    update_str = f'{update_str}, ld_desc=\'{new_notes}\'' # Add to update_str
 
     # Add total hours
     update_str = f'{update_str}, total_hrs={str(total_hrs)}'
@@ -332,14 +323,17 @@ def proj_check(proj, database = sql_db):
         f'SELECT TOP 1 * FROM {database}.dbo.PJPROJ WHERE project=\'{proj}\''
     return sql_bool_test_query(query, database)
 
-def id_check(entry_ids, database = sql_db):
-    # Returns true if Teamworks time entry IDs are found in SL database
-    entry_ids = str(entry_ids)
-    entry_ids = entry_ids.split(',') # IDs are CSV
-    for id in entry_ids:
-        query = f'\
-            SELECT TOP 1 * FROM {database}.dbo.PJLABDET \
-            WHERE ld_desc LIKE \'%{id}%\''
+def id_check(entry_id, database = sql_db):
+    # Returns true if Teamworks time entry ID is found in SL database.
+    # Only pass a single ID to this method at a time.
+    entry_id = str(entry_id)
+    query = \
+        f'SELECT TOP 1 * FROM {database}.dbo.PJNOTES ' +\
+        f'WHERE note_type_cd=\'TIME\' ' +\
+        f'AND crtd_datetime>\'2021-11-01 00:00:00\' ' +\
+        f'AND (notes1 LIKE \'%{entry_id}%\' ' +\
+        f'OR notes2 LIKE \'%{entry_id}%\' ' +\
+        f'OR notes3 LIKE \'%{entry_id}%\')'
 
     return sql_bool_test_query(query, database)
 
@@ -402,22 +396,6 @@ def update_rollups(docnbr, user = '', timecard = '', database = sql_db):
             # Add line to line count
             t_lines += 1
 
-    # Determine timecard status
-    # status = 'I' # Default: (I)n Process
-    # pe_date = None
-    # query = \
-    #     f'SELECT TOP 1 * FROM {database}.dbo.PJLABHDR WHERE docnbr=\'{docnbr}\''
-    # if sql_bool_test_query(query):
-    #     sql_data = sql_query(query)
-    #     for line in sql_data:
-    #         pe_date = time_helper.str_to_time(str(line.pe_date))
-    #
-    # post_date = time_helper.get_post_date(pe_date)
-    # cur_date = time_helper.get_cur_time()
-    #
-    # if cur_date > post_date:
-    #     status = 'C'
-
     # Set timecard status to (C)ompleted if all time entries were imported
     status_str = ''
     if error_handler.error_dict[user][timecard]['proj_missing'] == False:
@@ -461,6 +439,90 @@ def set_import_status(docnbr, status = 'I', database = sql_db):
     else:
         info_str = f'docnbr: {docnbr}, new status: {status}'
         error_handler.log_to_file('034', info_str)
+
+def add_notes(num_pe, imported_ids):
+    # Makes a new PJNOTES entry with input TW time IDs
+    pjnotes = dict(dictionaries.pjnotes)
+    pjnotes['crtd_datetime'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    pjnotes[key_val] = num_pe
+    pjnotes['lupd_datetime'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Limit notes per note field to 28 TW IDs + commas (251 chars)
+    n1 = imported_ids # Default notes value will be entire string
+    n2 = ''
+    n3 = ''
+    # Create separate strings if length of entire string is too great
+    if len(imported_ids) > 251 and len(imported_ids) < 504:
+        n1 = imported_ids[:251]
+        n2 = imported_ids[252:503]
+    if len(imported_ids) > 503:
+        n1 = imported_ids[:251]
+        n2 = imported_ids[252:503]
+        n3 = imported_ids[504:755]
+    if len(imported_ids) > 755:
+        print(error_handler.error_msgs['038'])
+        error_handler.log_to_file('038', '')
+
+    pjnotes['notes1'] = n1
+    pjnotes['notes2'] = n2
+    pjnotes['notes3'] = n3
+    pjnotes['note_disp'] = imported_ids[:40]
+
+    try:
+        sql_insert_dataset(pjnotes, 'PJNOTES')
+    except:
+        # Log error and stack trace
+        print(error_handler.error_msgs['040'] + num_pe)
+        error_handler.log_to_file('040', num_pe)
+        error_handler.log_to_file('000', traceback.format_exc())
+    else:
+        # Log success
+        print(error_handler.error_msgs['039'] + num_pe)
+        error_handler.log_to_file('039', num_pe)
+
+def update_notes(num_pe, imported_ids):
+    # Updates an existing TW IDs PJNOTES entry, appending new notes
+    cur_notes = sql_get_notes(num_pe)
+    cur_notes_str = ''
+    if len(cur_notes) > 0:
+        cur_notes_str = \
+            cur_notes['notes1'] + ',' +\
+            cur_notes['notes2'] + ',' +\
+            cur_notes['notes3']
+        cur_notes_str = cur_notes_str.rstrip(',')
+
+    new_notes = f'{cur_notes_str},{imported_ids}'
+    # Limit notes per note field to 28 TW IDs + commas (251 chars)
+    n1 = new_notes # Default notes value will be entire string
+    n2 = ''
+    n3 = ''
+    # Create separate strings if length of entire string is too great
+    if len(new_notes) > 251 and len(new_notes) < 504:
+        n1 = new_notes[:251]
+        n2 = new_notes[252:503]
+    if len(new_notes) > 503:
+        n1 = new_notes[:251]
+        n2 = new_notes[252:503]
+        n3 = new_notes[504:755]
+    if len(new_notes) > 755:
+        print(error_handler.error_msgs['038'])
+        error_handler.log_to_file('038', '')
+
+    # Construct query update string and filter
+    update_str = f'notes1=\'{n1}\', notes2=\'{n2}\', notes3=\'{n3}\''
+    filter = f'key_value=\'{num_pe}\''
+
+    # Update notes line
+    try:
+        print('update string: ' + update_str)
+        sql_update('PJNOTES', update_str, filter)
+    except:
+        print(error_handler.error_msgs['042'] + num_pe)
+        error_handler.log_to_file('042', num_pe)
+        error_handler.log_to_file('000', traceback.format_exc())
+    else:
+        print(error_handler.error_msgs['041'] + num_pe)
+        error_handler.log_to_file('041', num_pe)
 
 def sql_insert_line(tc_dict, user, timecard, proj_task, ex_docnbr, linenbr):
     # Inserts a line of data into PJLABDET
@@ -530,15 +592,6 @@ def sql_update_line(tc_dict, docnbr, linenbr, proj_task, project, task, user):
     total_amount = rate * total_hrs
     update_str = f'{update_str}, total_amount={str(total_amount)}'
 
-    # Add Teamwork IDs to update string
-    tw_ids = tc_dict['dets'][proj_task]['ld_desc']
-    cur_notes = sql_get_notes(docnbr, project, task)
-    if cur_notes != '':
-        cur_notes = f'{cur_notes},'
-    new_notes = f'{cur_notes}{tw_ids}'
-    new_notes = new_notes[:30] # Truncate longer than 30 chars
-    update_str = f'{update_str}, ld_desc=\'{new_notes}\''
-
     # Log notes changes to be added
     log_str = f'{log_str}:{tw_ids}'
 
@@ -577,6 +630,7 @@ def insert_timecard(user, timecard, tc_dict):
     cur_docnbr = tc_dict['hdr']['docnbr']
     ex_docnbr = pe_user_check(user_num, pe_date)
     timecard_posted = False
+    imported_ids = '' # CSV list of TW IDs that successfully import
 
     # Insert header data if none already exists
     if ex_docnbr == None:
@@ -636,9 +690,6 @@ def insert_timecard(user, timecard, tc_dict):
         error_handler.error_dict[user][timecard][proj_task]['proj_missing']\
             = False
 
-        # Truncate Teamwork IDs string if longer than 30 chars
-        tc_dict['dets'][proj_task]['ld_desc'] = cur_twids[:30]
-
         # Check if timecard is (P)osted. For logging line-item details.
         if timecard_posted == True:
             # Log error, do not insert or update.
@@ -658,14 +709,10 @@ def insert_timecard(user, timecard, tc_dict):
                 = True
             checks_passed = False
 
-        # Check if timecard entry ID has previously been imported.
-        if id_check(cur_twids):
-            # Log error, update import status to true since ID already in SL,
-            # do not insert or update.
-            print(error_handler.error_msgs['002'] + str(cur_twids))
-            error_handler.log_to_file('002', str(cur_twids))
-            mark_imported = True
-            checks_passed = False
+        # Truncate Teamwork IDs string in PJLABDET if longer than 30 chars
+        # Will import entire string to PJNOTES instead.
+        cur_twids = str(cur_twids)
+        tc_dict['dets'][proj_task]['ld_desc'] = cur_twids[:30]
 
         # Determine if update or insert should be performed
         if ex_docnbr != None and checks_passed == True:
@@ -699,18 +746,43 @@ def insert_timecard(user, timecard, tc_dict):
                     cur_task, \
                     user \
                 )
-        # else:
-            # error_handler.error_dict[user][timecard][proj_task]['err'] = True
 
-        # Mark line imported if successful
+        # Mark line imported if successful and add imported TW IDs to log CSV
         if mark_imported == True:
             error_handler.error_dict[user][timecard][proj_task]['imported']\
                 = True
+            if imported_ids == '':
+                imported_ids = str(cur_twids)
+            else:
+                imported_ids = f'{imported_ids},{str(cur_twids)}'
 
-    # Adjust rollup values in PJLABHDR if detail lines were added to an
-    # existing timecard.
-    if ex_docnbr != None and timecard_posted == False:
+    # Check if anything was actually imported
+    entries_imported = False # Default value indicates nothing was imported
+    if len(imported_ids) > 0:
+        entries_imported = True
+    else:
+        print(error_handler.error_msgs['043'] + cur_docnbr)
+        error_handler.log_to_file('043', cur_docnbr)
+
+    # Adjust rollup values in PJLABHDR and imported IDs logged in PJNOTES if
+    # detail lines were added to an existing timecard.
+    if entries_imported == True \
+    and ex_docnbr != None \
+    and timecard_posted == False:
         update_rollups(cur_docnbr, user, timecard)
+
+        mod_pe_date = time_helper.modify_pe_date(pe_date)
+        num_pe = f'{user_num} {mod_pe_date}'
+        update_notes(num_pe, imported_ids)
+
+    # Add imported IDs to PJNOTES if new hdr item
+    if entries_imported == True \
+    and ex_docnbr == None \
+    and timecard_posted == False:
+        # Generate key, employee number + modified PE date: '1234 01312021'
+        mod_pe_date = time_helper.modify_pe_date(pe_date)
+        num_pe = f'{user_num} {mod_pe_date}'
+        add_notes(num_pe, imported_ids)
 
     # Adjust timecard status to (I)n Process if any projects for this timecard
     # were missing from the SQL database.

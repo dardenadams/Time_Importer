@@ -6,6 +6,7 @@ import error_handler
 import file_helper
 import dictionaries
 import time
+import utilities
 
 if __name__ == '__main__':
     # Clear log files

@@ -175,3 +175,19 @@ pjlabdet = {
 	'work_comp_cd': '',
 	'work_type': ''
 }
+
+pjnotes = {
+	'crtd_datetime': 'set_cur_time',
+	'crtd_prog': 'SCRIPT',
+	'crtd_user': 'SCRIPT',
+	'key_index': '01',
+	'key_value': 'set_key_pe_date', # Format: '0809 02262016'
+	'lupd_datetime': 'set_cur_time',
+	'lupd_prog': 'SCRIPT',
+	'lupd_user': 'SCRIPT',
+	'notes1': 'set_notes', # Limit to 254 chars
+	'notes2': '', # Limit to 254 chars
+	'notes3': '', # Limit to 252 chars
+	'note_disp': 'set_notes_short', # Limit to 40 chars
+	'note_type_cd': 'TIME'
+}

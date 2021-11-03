@@ -16,7 +16,7 @@ error_dict = {}
 error_msgs = {
     '000': '',
     '001': 'Project isn\'t in the SL database yet: ',
-    '002': 'Teamwork time entry ID(s) already present in SL database, ' +\
+    '002': 'Teamwork time entry ID already present in SL database, ' +\
         'skipping import: ',
     '003': 'Unhandled error. Failed to import header line: ',
     '004': 'Unhandled error. Failed to import detail line: ',
@@ -53,7 +53,15 @@ error_msgs = {
     '033': 'Failed to update import status (le_status): ',
     '034': 'Updated import status (le_status): ',
     '035': 'Assigned linenbr info: ',
-    '036': 'Running import on SQL database: '
+    '036': 'Running import on SQL database: ',
+    '037': 'TW IDs must be marked \'Imported\'. Pausing 60 seconds to ' +\
+        'reduce risk of hitting TW process limit ...',
+    '038': 'Too many TW IDs to add to PJNOTES. IDs will be truncated.',
+    '039': 'Successfully logged imported TW IDs to PJNOTES. Key: ',
+    '040': 'Failed to log imported TW IDs to PJNOTES. Key: ',
+    '041': 'Successfully updated TW IDs in PJNOTES. Key: ',
+    '042': 'Failed to update TW IDs in PJNOTES. Key: ',
+    '043': 'No time entries imported or updated for timecard: '
 }
 
 def log_to_file(error_id, detail_text):
@@ -237,7 +245,7 @@ def mark_imported():
     start_time = time.time()
     count = 1
 
-    for id in twids:
+    for id in reversed(twids):
         # Pause processing if necessary to avoid server refusing connection
         elapsed_time = time.time() - start_time
         if elapsed_time == 0:
