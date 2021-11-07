@@ -7,6 +7,7 @@ import error_handler
 import traceback
 import file_helper
 import time_helper
+from datetime import datetime
 
 sql_server = 'sqlsl.esc.com'
 sql_db = 'ESCDB'
@@ -87,9 +88,15 @@ def sql_get_notes(key_val, database = sql_db):
     if sql_bool_test_query(query, database):
         sql_data = sql_query(query, database)
         for item in sql_data:
+            print(item)
             ret_val['notes1'] = (item.notes1).strip()
             ret_val['notes2'] = (item.notes2).strip()
             ret_val['notes3'] = (item.notes3).strip()
+    # In case where no notes entry already exists, create a blank one
+    else:
+        add_notes(key_val, '')
+
+    # Return notes, if any
     return ret_val
 
 def del_whole_timecard(docnbr, database = sql_db):
@@ -327,15 +334,27 @@ def id_check(entry_id, database = sql_db):
     # Returns true if Teamworks time entry ID is found in SL database.
     # Only pass a single ID to this method at a time.
     entry_id = str(entry_id)
-    query = \
+    ret_val = False
+
+    # Search PJNOTES
+    pjnotes_query = \
         f'SELECT TOP 1 * FROM {database}.dbo.PJNOTES ' +\
         f'WHERE note_type_cd=\'TIME\' ' +\
-        f'AND crtd_datetime>\'2021-11-01 00:00:00\' ' +\
+        f'AND crtd_datetime>\'2021-06-01 00:00:00\' ' +\
         f'AND (notes1 LIKE \'%{entry_id}%\' ' +\
         f'OR notes2 LIKE \'%{entry_id}%\' ' +\
         f'OR notes3 LIKE \'%{entry_id}%\')'
+    pjnotes_result = sql_bool_test_query(pjnotes_query, database)
 
-    return sql_bool_test_query(query, database)
+    # Search legacy PJLABDET entries
+    pjlabdet_query = \
+        f'SELECT TOP 1 * FROM {database}.dbo.PJLABDET ' +\
+        f'WHERE ld_desc LIKE \'%{entry_id}%\''
+    pjlabdet_result = sql_bool_test_query(pjlabdet_query, database)
+
+    if pjnotes_result == True or pjlabdet_result == True:
+        ret_val = True
+    return ret_val
 
 def status_posted_check(docnbr, database = sql_db):
     # Returns true if timecard is marked (P)osted
@@ -444,7 +463,7 @@ def add_notes(num_pe, imported_ids):
     # Makes a new PJNOTES entry with input TW time IDs
     pjnotes = dict(dictionaries.pjnotes)
     pjnotes['crtd_datetime'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    pjnotes[key_val] = num_pe
+    pjnotes['key_value'] = num_pe
     pjnotes['lupd_datetime'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Limit notes per note field to 28 TW IDs + commas (251 chars)
@@ -491,7 +510,13 @@ def update_notes(num_pe, imported_ids):
             cur_notes['notes3']
         cur_notes_str = cur_notes_str.rstrip(',')
 
-    new_notes = f'{cur_notes_str},{imported_ids}'
+    # Assemble new notes string
+    new_notes = ''
+    if cur_notes_str == '':
+        new_notes = imported_ids
+    else:
+        new_notes = f'{cur_notes_str},{imported_ids}'
+
     # Limit notes per note field to 28 TW IDs + commas (251 chars)
     n1 = new_notes # Default notes value will be entire string
     n2 = ''
@@ -551,7 +576,15 @@ def sql_insert_line(tc_dict, user, timecard, proj_task, ex_docnbr, linenbr):
 
     return ret_val
 
-def sql_update_line(tc_dict, docnbr, linenbr, proj_task, project, task, user):
+def sql_update_line(\
+    tc_dict, \
+    docnbr, \
+    linenbr, \
+    proj_task, \
+    project, \
+    task, \
+    tw_ids, \
+    user):
     # Updates hours, dollar amount, and notes data for a project/task line item
     ret_val = False
 
@@ -718,8 +751,8 @@ def insert_timecard(user, timecard, tc_dict):
         if ex_docnbr != None and checks_passed == True:
             if line_check(ex_docnbr, cur_proj, cur_task):
                 # If line already exists, perform update instead of insert.
-                print(error_handler.error_msgs['023'] + str(cur_twids))
-                error_handler.log_to_file('023', str(cur_twids))
+                print(error_handler.error_msgs['023'] + str(proj_task))
+                error_handler.log_to_file('023', str(proj_task))
                 operation = 'update'
 
         # Perform line insert or update as indicated
@@ -744,6 +777,7 @@ def insert_timecard(user, timecard, tc_dict):
                     proj_task, \
                     cur_proj, \
                     cur_task, \
+                    cur_twids, \
                     user \
                 )
 
@@ -772,7 +806,7 @@ def insert_timecard(user, timecard, tc_dict):
         update_rollups(cur_docnbr, user, timecard)
 
         mod_pe_date = time_helper.modify_pe_date(pe_date)
-        num_pe = f'{user_num} {mod_pe_date}'
+        num_pe = user_num.strip() + ' ' + mod_pe_date.strip()
         update_notes(num_pe, imported_ids)
 
     # Add imported IDs to PJNOTES if new hdr item

@@ -235,8 +235,8 @@ def construct_dict(time_dict, project_details):
 		# Get current entry's data
 		tw_proj_id = time_dict[entry]['project']
 		tw_entry_ids = entry
-		dyn_proj_id = project_details[tw_proj_id]['SL ID']
-		task_code = project_details[tw_proj_id]['Task Code']
+		dyn_proj_id = (project_details[tw_proj_id]['SL ID']).strip()
+		task_code = (project_details[tw_proj_id]['Task Code']).strip()
 		date_time = time_dict[entry]['date_time']
 		pe_date = time_helper.get_pe_date(date_time) # Calc period end date
 		day = 'day' + str(dictionaries.day_map[date_time.weekday()]) + '_hr1'
@@ -405,7 +405,7 @@ def put_tag_list(entry_ids, tag, start_time, count):
 		info_msg =  f'ID: {id}, Tag: {tag}'
 		print(error_handler.error_msgs['021'] + info_msg)
 		error_handler.log_to_file('021',  info_msg)
-		#put_tag(id, tag)
+		put_tag(id, tag)
 
 		# Log ID if status is imported in case changes must be reversed.
 		# No need to log IDs for items tagged Posted; do not need to try
