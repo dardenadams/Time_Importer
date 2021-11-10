@@ -88,10 +88,11 @@ def sql_get_notes(key_val, database = sql_db):
     if sql_bool_test_query(query, database):
         sql_data = sql_query(query, database)
         for item in sql_data:
-            print(item)
+            # print(item)
             ret_val['notes1'] = (item.notes1).strip()
             ret_val['notes2'] = (item.notes2).strip()
             ret_val['notes3'] = (item.notes3).strip()
+
     # In case where no notes entry already exists, create a blank one
     else:
         add_notes(key_val, '')
@@ -539,7 +540,7 @@ def update_notes(num_pe, imported_ids):
 
     # Update notes line
     try:
-        print('update string: ' + update_str)
+        # print('update string: ' + update_str)
         sql_update('PJNOTES', update_str, filter)
     except:
         print(error_handler.error_msgs['042'] + num_pe)
@@ -798,24 +799,23 @@ def insert_timecard(user, timecard, tc_dict):
         print(error_handler.error_msgs['043'] + cur_docnbr)
         error_handler.log_to_file('043', cur_docnbr)
 
+    # Generate key_val for PJNOTES entry
+    # Employee number + modified PE date: '1234 01312021'
+    mod_pe_date = time_helper.modify_pe_date(pe_date)
+    num_pe = user_num.strip() + ' ' + mod_pe_date.strip()
+
     # Adjust rollup values in PJLABHDR and imported IDs logged in PJNOTES if
     # detail lines were added to an existing timecard.
     if entries_imported == True \
     and ex_docnbr != None \
     and timecard_posted == False:
         update_rollups(cur_docnbr, user, timecard)
-
-        mod_pe_date = time_helper.modify_pe_date(pe_date)
-        num_pe = user_num.strip() + ' ' + mod_pe_date.strip()
         update_notes(num_pe, imported_ids)
 
     # Add imported IDs to PJNOTES if new hdr item
     if entries_imported == True \
     and ex_docnbr == None \
     and timecard_posted == False:
-        # Generate key, employee number + modified PE date: '1234 01312021'
-        mod_pe_date = time_helper.modify_pe_date(pe_date)
-        num_pe = f'{user_num} {mod_pe_date}'
         add_notes(num_pe, imported_ids)
 
     # Adjust timecard status to (I)n Process if any projects for this timecard
