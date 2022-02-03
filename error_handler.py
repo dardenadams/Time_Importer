@@ -9,7 +9,7 @@ import time
 
 # Accounting contact who will receive alerts when projects need to be imported
 # to Dynamics.
-accounting_contact = 'mdiloreto@escspectrum.com'
+accounting_contacts = ['mdiloreto@escspectrum.com', 'rblackman@escspectrum.com']
 
 error_dict = {}
 
@@ -235,7 +235,7 @@ def email_results():
     body = msg_to_accounting()
     subject = 'Please add projects to Dynamics'
     if body != None:
-        send_script_alert(subject, body, accounting_contact)
+        send_script_alert(subject, body, accounting_contacts)
 
 def mark_imported():
     # Marks time entries from file imported (for cleanup if failed)
