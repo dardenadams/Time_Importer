@@ -7,9 +7,19 @@ import dictionaries
 import smtplib
 import time
 
-# Accounting contact who will receive alerts when projects need to be imported
-# to Dynamics.
-accounting_contacts = ['mdiloreto@escspectrum.com', 'rblackman@escspectrum.com']
+# Contacts who should be alerted when projects need to be imported to SL
+accounting_contacts = [
+    'rblackman@escspectrum.com',
+    'mdiloreto@escspectrum.com',
+    'dadams@escspectrum.com',
+    'jshelian@escspectrum.com'
+]
+
+# Contacts who should receive log file after each run
+import_log_contacts = [
+    'dadams@escspectrum.com',
+    'jshelian@escspectrum.com'
+]
 
 error_dict = {}
 
@@ -207,9 +217,10 @@ def msg_to_accounting():
 def send_script_alert(\
     subject, \
     body, \
-    to_email = 'journal@envirosys.com', \
+    to_email, \
     from_email = 'escscript@envirosys.com'):
     # Sends a script alert email. Specify subject and body.
+    #= 'journal@envirosys.com'
 
     port = 25  # For SSL, specify 465
     smtp_server = 'smtp.envirosys.com'
@@ -228,7 +239,7 @@ def email_results():
     subject = 'Teamwork time import log'
     if err_present():
         subject = f'{subject} - unhandled errors recorded'
-    send_script_alert(subject, body)
+    send_script_alert(subject, body, import_log_contacts)
 
     # Send alert accounting if time failed to import due to project missing
     # from Dynamics database.
@@ -236,6 +247,9 @@ def email_results():
     subject = 'Please add projects to Dynamics'
     if body != None:
         send_script_alert(subject, body, accounting_contacts)
+
+def test_email():
+    send_script_alert('Test Email', 'Testing time import alerts.', accounting_contacts)
 
 def mark_imported():
     # Marks time entries from file imported (for cleanup if failed)
